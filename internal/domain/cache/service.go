@@ -3,29 +3,30 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
-	"go.uber.org/zap"
 )
 
-// Result is returned by Lookup and signals whether the entry came from cache.
+// Result carries the outcome of a Handle call.
 type Result struct {
-	Entry  domain.CacheEntry
-	IsHit  bool
+	Entry domain.CacheEntry
+	IsHit bool
 }
 
-// Service orchestrates the semantic cache logic, decoupled from any
-// particular embedding model or vector store implementation.
+// Service orchestrates the semantic cache logic, decoupled from any particular
+// embedding model, vector store, or LLM implementation.
 type Service struct {
 	embedder  domain.EmbedderPort
 	store     domain.VectorStorePort
 	llm       domain.LLMPort
+	metrics   domain.MetricsRecorder
 	threshold float64
 	ttl       time.Duration
 	limit     uint64
-	log       *zap.Logger
+	log       *slog.Logger
 }
 
 // NewService constructs a Service with the required ports and cache parameters.
@@ -33,15 +34,17 @@ func NewService(
 	embedder domain.EmbedderPort,
 	store domain.VectorStorePort,
 	llm domain.LLMPort,
+	metrics domain.MetricsRecorder,
 	threshold float64,
 	ttl time.Duration,
 	limit uint64,
-	log *zap.Logger,
+	log *slog.Logger,
 ) *Service {
 	return &Service{
 		embedder:  embedder,
 		store:     store,
 		llm:       llm,
+		metrics:   metrics,
 		threshold: threshold,
 		ttl:       ttl,
 		limit:     limit,
@@ -49,33 +52,43 @@ func NewService(
 	}
 }
 
-// Handle processes an LLM request by first consulting the semantic cache.
-// On a miss it calls the upstream LLM and stores the result asynchronously.
+// Handle processes an LLM request through the semantic cache.
+// On a cache miss it calls the upstream LLM and asynchronously persists the result.
 func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, Result, error) {
 	queryText := extractQueryText(req)
 
+	embedStart := time.Now()
 	embedding, err := s.embedder.Embed(ctx, queryText)
+	s.metrics.RecordEmbedDuration(time.Since(embedStart))
 	if err != nil {
 		return domain.LLMResponse{}, Result{}, fmt.Errorf("embedding query: %w", err)
 	}
 
 	candidates, err := s.store.Search(ctx, embedding, s.limit, s.threshold)
 	if err != nil {
-		s.log.Warn("vector store search failed, falling through to LLM", zap.Error(err))
+		s.metrics.RecordStoreError()
+		s.log.WarnContext(ctx, "vector store search failed, falling through to LLM",
+			slog.String("error", err.Error()),
+		)
 	}
 
 	if len(candidates) > 0 {
 		hit := candidates[0]
-		s.log.Info("cache hit",
-			zap.String("entry_id", hit.ID.String()),
-			zap.Float32("score", hit.Score),
+		s.metrics.RecordCacheHit()
+		s.log.InfoContext(ctx, "cache hit",
+			slog.String("entry_id", hit.ID.String()),
+			slog.Float64("score", float64(hit.Score)),
 		)
 		return domain.LLMResponse{Content: hit.Response, Raw: []byte(hit.Response)},
 			Result{Entry: hit, IsHit: true},
 			nil
 	}
 
+	s.metrics.RecordCacheMiss()
+
+	llmStart := time.Now()
 	resp, err := s.llm.Complete(ctx, req)
+	s.metrics.RecordLLMDuration(time.Since(llmStart))
 	if err != nil {
 		return domain.LLMResponse{}, Result{}, fmt.Errorf("upstream LLM: %w", err)
 	}
@@ -100,14 +113,14 @@ func (s *Service) persistAsync(entry domain.CacheEntry) {
 
 	if err := s.store.Upsert(ctx, entry); err != nil {
 		s.log.Error("failed to persist cache entry",
-			zap.String("entry_id", entry.ID.String()),
-			zap.Error(err),
+			slog.String("entry_id", entry.ID.String()),
+			slog.String("error", err.Error()),
 		)
 	}
 }
 
 // extractQueryText produces a canonical string from an LLMRequest for embedding.
-// It concatenates the content of all user-role messages.
+// User-role messages are concatenated in order; if none exist, all messages are used.
 func extractQueryText(req domain.LLMRequest) string {
 	if len(req.Messages) == 0 {
 		return string(req.Raw)

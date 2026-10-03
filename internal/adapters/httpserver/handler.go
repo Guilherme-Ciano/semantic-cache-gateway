@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain/cache"
-	"go.uber.org/zap"
+	"github.com/guilhermebr/semantic-cache-gateway/pkg/telemetry"
 )
 
 const (
@@ -20,14 +21,21 @@ const (
 	headerScore       = "X-Cache-Score"
 )
 
+// Config groups HTTP-layer tunables injected at construction time.
+type Config struct {
+	RequestTimeout  time.Duration
+	RateLimitRPS    float64
+	RateLimitBurst  int
+}
+
 // Handler holds the HTTP layer dependencies.
 type Handler struct {
 	svc *cache.Service
-	log *zap.Logger
+	log *slog.Logger
 }
 
-// New returns an http.Handler with all routes mounted.
-func New(svc *cache.Service, log *zap.Logger) http.Handler {
+// New returns an http.Handler with all routes and middlewares mounted.
+func New(svc *cache.Service, metrics *telemetry.Metrics, cfg Config, log *slog.Logger) http.Handler {
 	h := &Handler{svc: svc, log: log}
 
 	r := chi.NewRouter()
@@ -35,8 +43,11 @@ func New(svc *cache.Service, log *zap.Logger) http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(loggingMiddleware(log))
 	r.Use(middleware.Recoverer)
+	r.Use(RateLimiterMiddleware(cfg.RateLimitRPS, cfg.RateLimitBurst))
+	r.Use(TimeoutMiddleware(cfg.RequestTimeout))
 
 	r.Get("/healthz", h.healthz)
+	r.Handle("/metrics", telemetry.Handler())
 	r.Post("/v1/chat/completions", h.chatCompletions)
 
 	return r
@@ -44,13 +55,12 @@ func New(svc *cache.Service, log *zap.Logger) http.Handler {
 
 func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 // chatCompletions is the primary gateway endpoint. It accepts an OpenAI-
 // compatible chat request, queries the semantic cache, and either returns a
-// cached response or proxies the call to the configured upstream LLM.
+// cached response or proxies the call to the upstream LLM.
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	var req openAIChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -58,11 +68,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domainReq := toDomainRequest(req)
-
-	resp, result, err := h.svc.Handle(r.Context(), domainReq)
+	resp, result, err := h.svc.Handle(r.Context(), toDomainRequest(req))
 	if err != nil {
-		h.log.Error("service error", zap.Error(err))
+		h.log.ErrorContext(r.Context(), "service error", slog.String("error", err.Error()))
 		writeJSON(w, http.StatusBadGateway, errBody("upstream error: "+err.Error()))
 		return
 	}

@@ -24,48 +24,45 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `yaml:"read_timeout"`
 	WriteTimeout    time.Duration `yaml:"write_timeout"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	// RateLimitRPS is the sustained request rate per IP (token bucket).
+	RateLimitRPS   float64 `yaml:"rate_limit_rps"`
+	// RateLimitBurst is the maximum burst size above RateLimitRPS.
+	RateLimitBurst int     `yaml:"rate_limit_burst"`
 }
 
 type CacheConfig struct {
-	// SimilarityThreshold is the minimum cosine similarity score [0,1] to
-	// consider a cached entry a semantic hit.
-	SimilarityThreshold float64 `yaml:"similarity_threshold"`
-	// TTL controls how long cached entries are kept in the vector store.
-	TTL time.Duration `yaml:"ttl"`
-	// MaxCandidates is the number of nearest neighbours retrieved per query.
-	MaxCandidates uint64 `yaml:"max_candidates"`
+	// SimilarityThreshold is the minimum cosine similarity [0,1] for a cache hit.
+	SimilarityThreshold float64       `yaml:"similarity_threshold"`
+	TTL                 time.Duration `yaml:"ttl"`
+	MaxCandidates       uint64        `yaml:"max_candidates"`
 }
 
 type EmbedderConfig struct {
-	Provider string `yaml:"provider"` // "openai" | "local"
+	Provider string `yaml:"provider"` // "openai"
 	Model    string `yaml:"model"`
 	APIKey   string `yaml:"api_key"`
 	BaseURL  string `yaml:"base_url"`
 }
 
 type LLMConfig struct {
-	Provider string `yaml:"provider"` // "openai" | "passthrough"
-	Model    string `yaml:"model"`
-	APIKey   string `yaml:"api_key"`
-	BaseURL  string `yaml:"base_url"`
-	// UpstreamURL is used by the passthrough adapter to proxy raw requests.
+	Provider    string `yaml:"provider"` // "openai" | "passthrough"
+	Model       string `yaml:"model"`
+	APIKey      string `yaml:"api_key"`
+	BaseURL     string `yaml:"base_url"`
 	UpstreamURL string `yaml:"upstream_url"`
 }
 
 type VectorDBConfig struct {
-	Provider string `yaml:"provider"` // "qdrant" | "redis"
-	// Qdrant
+	Provider         string `yaml:"provider"` // "qdrant" | "redis"
 	QdrantHost       string `yaml:"qdrant_host"`
 	QdrantPort       int    `yaml:"qdrant_port"`
 	QdrantCollection string `yaml:"qdrant_collection"`
 	QdrantAPIKey     string `yaml:"qdrant_api_key"`
-	// Redis
-	RedisAddr     string `yaml:"redis_addr"`
-	RedisPassword string `yaml:"redis_password"`
-	RedisDB       int    `yaml:"redis_db"`
-	RedisIndex    string `yaml:"redis_index"`
-	// Shared
-	VectorDimension uint64 `yaml:"vector_dimension"`
+	RedisAddr        string `yaml:"redis_addr"`
+	RedisPassword    string `yaml:"redis_password"`
+	RedisDB          int    `yaml:"redis_db"`
+	RedisIndex       string `yaml:"redis_index"`
+	VectorDimension  uint64 `yaml:"vector_dimension"`
 }
 
 type TelemetryConfig struct {
@@ -73,9 +70,7 @@ type TelemetryConfig struct {
 	MetricsAddr string `yaml:"metrics_addr"`
 }
 
-// Load reads configuration from a YAML file and then overlays values from
-// environment variables (ENV_VAR format matching the yaml path, uppercased
-// and dotted → underscored).
+// Load reads configuration from an optional YAML file and overlays env vars.
 func Load(path string) (*Config, error) {
 	cfg := defaults()
 
@@ -105,6 +100,8 @@ func defaults() *Config {
 			ReadTimeout:     30 * time.Second,
 			WriteTimeout:    60 * time.Second,
 			ShutdownTimeout: 15 * time.Second,
+			RateLimitRPS:    10,
+			RateLimitBurst:  20,
 		},
 		Cache: CacheConfig{
 			SimilarityThreshold: 0.92,
@@ -139,6 +136,13 @@ func overlayEnv(cfg *Config) {
 			}
 		}
 	}
+	setInt := func(dst *int, key string) {
+		if v := os.Getenv(key); v != "" {
+			if i, err := strconv.Atoi(v); err == nil {
+				*dst = i
+			}
+		}
+	}
 	setDuration := func(dst *time.Duration, key string) {
 		if v := os.Getenv(key); v != "" {
 			if d, err := time.ParseDuration(v); err == nil {
@@ -151,6 +155,8 @@ func overlayEnv(cfg *Config) {
 	setDuration(&cfg.Server.ReadTimeout, "SERVER_READ_TIMEOUT")
 	setDuration(&cfg.Server.WriteTimeout, "SERVER_WRITE_TIMEOUT")
 	setDuration(&cfg.Server.ShutdownTimeout, "SERVER_SHUTDOWN_TIMEOUT")
+	setFloat(&cfg.Server.RateLimitRPS, "RATE_LIMIT_RPS")
+	setInt(&cfg.Server.RateLimitBurst, "RATE_LIMIT_BURST")
 
 	setFloat(&cfg.Cache.SimilarityThreshold, "CACHE_SIMILARITY_THRESHOLD")
 	setDuration(&cfg.Cache.TTL, "CACHE_TTL")
@@ -185,6 +191,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.VectorDB.VectorDimension == 0 {
 		errs = append(errs, "vector_db.vector_dimension must be > 0")
+	}
+	if cfg.Server.RateLimitRPS <= 0 {
+		errs = append(errs, "server.rate_limit_rps must be > 0")
 	}
 
 	if len(errs) > 0 {

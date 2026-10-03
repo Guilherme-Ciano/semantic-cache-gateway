@@ -10,27 +10,26 @@ import (
 	oai "github.com/sashabaranov/go-openai"
 )
 
-// Embedder wraps the OpenAI client for text embedding.
+// Embedder wraps the OpenAI client to satisfy domain.EmbedderPort.
 type Embedder struct {
 	client *oai.Client
 	model  oai.EmbeddingModel
 }
 
 // New returns an Embedder targeting the given model.
-// Set baseURL to a non-empty string to redirect to a compatible local endpoint.
+// Set baseURL to redirect to a compatible local endpoint (e.g. Ollama).
 func New(apiKey, model, baseURL string) *Embedder {
 	cfg := oai.DefaultConfig(apiKey)
 	if baseURL != "" {
 		cfg.BaseURL = baseURL
 	}
-
 	return &Embedder{
 		client: oai.NewClientWithConfig(cfg),
 		model:  oai.EmbeddingModel(model),
 	}
 }
 
-// Embed returns the vector representation of text.
+// Embed returns the dense vector representation of text.
 func (e *Embedder) Embed(ctx context.Context, text string) (domain.Vector, error) {
 	resp, err := e.client.CreateEmbeddings(ctx, oai.EmbeddingRequestStrings{
 		Input: []string{text},
@@ -39,7 +38,6 @@ func (e *Embedder) Embed(ctx context.Context, text string) (domain.Vector, error
 	if err != nil {
 		return nil, fmt.Errorf("openai embeddings: %w", err)
 	}
-
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("openai returned empty embedding data")
 	}

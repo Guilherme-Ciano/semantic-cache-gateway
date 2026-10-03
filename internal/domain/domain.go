@@ -9,6 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// MetricsRecorder abstracts metric instrumentation so the domain layer never
+// imports an observability library directly.
+type MetricsRecorder interface {
+	RecordCacheHit()
+	RecordCacheMiss()
+	RecordLLMDuration(d time.Duration)
+	RecordStoreError()
+	RecordEmbedDuration(d time.Duration)
+}
+
 // Vector is a typed alias for a dense float32 embedding.
 type Vector []float32
 

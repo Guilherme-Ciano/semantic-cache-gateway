@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,7 +19,7 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/config"
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/logger"
-	"go.uber.org/zap"
+	"github.com/guilhermebr/semantic-cache-gateway/pkg/telemetry"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 }
 
 func run() error {
-	cfgPath := flag.String("config", "", "path to YAML config file (optional; env vars take precedence)")
+	cfgPath := flag.String("config", "", "path to YAML config file (optional)")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -37,8 +38,8 @@ func run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	log := logger.Must(cfg.Telemetry.LogLevel)
-	defer log.Sync() //nolint:errcheck
+	log := logger.New(cfg.Telemetry.LogLevel)
+	metrics := telemetry.New()
 
 	embedder, err := buildEmbedder(cfg)
 	if err != nil {
@@ -62,7 +63,7 @@ func run() error {
 
 	llmClient := buildLLM(cfg)
 
-	application, err := app.New(cfg, embedder, llmClient, store, log)
+	application, err := app.New(cfg, embedder, llmClient, store, metrics, log)
 	if err != nil {
 		return fmt.Errorf("building application: %w", err)
 	}
@@ -82,7 +83,7 @@ func buildEmbedder(cfg *config.Config) (domain.EmbedderPort, error) {
 	}
 }
 
-func buildVectorStore(cfg *config.Config, log *zap.Logger) (domain.VectorStorePort, func(), error) {
+func buildVectorStore(cfg *config.Config, log *slog.Logger) (domain.VectorStorePort, func(), error) {
 	switch cfg.VectorDB.Provider {
 	case "qdrant", "":
 		s, err := qdrant.New(
@@ -110,7 +111,7 @@ func buildVectorStore(cfg *config.Config, log *zap.Logger) (domain.VectorStorePo
 		}
 		return s, func() {
 			if err := s.Close(); err != nil {
-				log.Warn("closing redis store", zap.Error(err))
+				log.Warn("closing redis store", slog.String("error", err.Error()))
 			}
 		}, nil
 

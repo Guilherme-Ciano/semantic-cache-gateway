@@ -1,30 +1,24 @@
+// Package logger wraps the standard log/slog package with opinionated defaults
+// for structured, JSON-encoded production output.
 package logger
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"log/slog"
+	"os"
 )
 
-// New builds a production zap logger with the given log level.
-func New(level string) (*zap.Logger, error) {
-	lvl, err := zapcore.ParseLevel(level)
-	if err != nil {
-		lvl = zapcore.InfoLevel
+// New returns a *slog.Logger configured for JSON output at the requested level.
+// Unrecognised level strings default to INFO.
+func New(level string) *slog.Logger {
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(level)); err != nil {
+		lvl = slog.LevelInfo
 	}
 
-	cfg := zap.NewProductionConfig()
-	cfg.Level = zap.NewAtomicLevelAt(lvl)
-	cfg.EncoderConfig.TimeKey = "ts"
-	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level:     lvl,
+		AddSource: false,
+	})
 
-	return cfg.Build(zap.AddCaller(), zap.AddCallerSkip(0))
-}
-
-// Must panics if logger construction fails — intended for use in main.
-func Must(level string) *zap.Logger {
-	l, err := New(level)
-	if err != nil {
-		panic(err)
-	}
-	return l
+	return slog.New(h)
 }
