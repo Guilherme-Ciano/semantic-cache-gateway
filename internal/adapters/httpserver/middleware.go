@@ -52,8 +52,8 @@ func TimeoutMiddleware(d time.Duration) func(http.Handler) http.Handler {
 				tw.mu.Lock()
 				if !tw.written {
 					tw.written = true
-					tw.Header().Set("Content-Type", "application/json")
-					tw.WriteHeader(http.StatusGatewayTimeout)
+					tw.ResponseWriter.Header().Set("Content-Type", "application/json")
+					tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
 					_, _ = tw.ResponseWriter.Write([]byte(`{"error":"upstream timeout"}`))
 				}
 				tw.mu.Unlock()
