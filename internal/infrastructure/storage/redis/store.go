@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -97,13 +97,11 @@ func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 			FieldName: fieldEmbedding,
 			FieldType: goredis.SearchFieldTypeVector,
 			VectorArgs: &goredis.FTVectorArgs{
-				Type:           "FLOAT32",
-				Dim:            dim,
-				DistanceMetric: "COSINE",
-				Algorithm:      goredis.SearchVectorAlgorithmHnsw,
-				HnswOptions: &goredis.FTHnswOptions{
-					M:              16,
-					EfConstruction: 200,
+				HNSWOptions: &goredis.FTHNSWOptions{
+					Type:            "FLOAT32",
+					Dim:             dim,
+					DistanceMetric:  "COSINE",
+					MaxEdgesPerNode: 16,
 				},
 			},
 		},
@@ -126,10 +124,10 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 	ftQuery := fmt.Sprintf("*=>[KNN %d @%s $vec AS %s]", limit, fieldEmbedding, fieldDistance)
 
 	res, err := s.client.FTSearchWithArgs(ctx, s.index, ftQuery, &goredis.FTSearchOptions{
-		Params:  map[string]interface{}{"vec": vectorToBytes(query)},
-		Return:  []goredis.FTSearchReturn{{FieldName: fieldDistance}, {FieldName: fieldQuery}, {FieldName: fieldResponse}, {FieldName: fieldExpiresAt}},
-		SortBy:  []goredis.FTSearchSortBy{{FieldName: fieldDistance, Asc: true}},
-		Dialect: 2,
+		Params:         map[string]interface{}{"vec": vectorToBytes(query)},
+		Return:         []goredis.FTSearchReturn{{FieldName: fieldDistance}, {FieldName: fieldQuery}, {FieldName: fieldResponse}, {FieldName: fieldExpiresAt}},
+		SortBy:         []goredis.FTSearchSortBy{{FieldName: fieldDistance, Asc: true}},
+		DialectVersion: 2,
 	}).Result()
 	if err != nil {
 		return nil, fmt.Errorf("ft.search: %w", err)
@@ -150,10 +148,10 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 			continue
 		}
 
-		id, err := parseEntryID(doc.Id)
+		id, err := parseEntryID(doc.ID)
 		if err != nil {
 			s.log.WarnContext(ctx, "unparseable entry key, skipping",
-				slog.String("key", doc.Id),
+				slog.String("key", doc.ID),
 				slog.String("error", err.Error()),
 			)
 			continue
@@ -168,7 +166,7 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 		}
 		entries = append(entries, entry)
 
-		go s.refreshTTL(doc.Id)
+		go s.refreshTTL(doc.ID)
 	}
 
 	return entries, nil
@@ -280,4 +278,3 @@ func isAlreadyExistsErr(err error) bool {
 }
 
 var _ = bytesToVector
-

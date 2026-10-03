@@ -43,4 +43,3 @@ func (e *Embedder) Embed(ctx context.Context, text string) (domain.Vector, error
 	}
 	return vec, nil
 }
-

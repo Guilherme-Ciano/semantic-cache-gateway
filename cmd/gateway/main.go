@@ -188,8 +188,8 @@ func breakerLLMConfig(c config.ComponentBreakerConfig) breaker.LLMConfig {
 	iv, to := c.Interval, c.Timeout
 	return breaker.LLMConfig{
 		MaxRequests:      c.MaxRequests,
-		Interval:         func() time.Duration { return iv },
-		Timeout:          func() time.Duration { return to },
+		Interval:         iv,
+		Timeout:          to,
 		FailureThreshold: c.FailureThreshold,
 	}
 }
@@ -198,8 +198,8 @@ func breakerStoreConfig(c config.ComponentBreakerConfig) breaker.StoreConfig {
 	iv, to := c.Interval, c.Timeout
 	return breaker.StoreConfig{
 		MaxRequests:      c.MaxRequests,
-		Interval:         func() time.Duration { return iv },
-		Timeout:          func() time.Duration { return to },
+		Interval:         iv,
+		Timeout:          to,
 		FailureThreshold: c.FailureThreshold,
 	}
 }
@@ -242,5 +242,3 @@ func setViperDefaults(d *config.Config) {
 	viper.SetDefault("telemetry.log_level", d.Telemetry.LogLevel)
 	viper.SetDefault("telemetry.metrics_addr", d.Telemetry.MetricsAddr)
 }
-
-

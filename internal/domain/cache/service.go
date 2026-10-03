@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
+	"github.com/google/uuid"
 )
 
 type Result struct {
@@ -157,4 +157,3 @@ func extractQueryText(req domain.LLMRequest) string {
 
 	return string(buf)
 }
-

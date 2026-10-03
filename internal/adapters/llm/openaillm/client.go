@@ -54,4 +54,3 @@ func (c *Client) Complete(ctx context.Context, req domain.LLMRequest) (domain.LL
 		Raw:     []byte(content),
 	}, nil
 }
-

@@ -62,7 +62,8 @@ func (m *Metrics) RecordCacheMiss()                    { m.cacheMisses.Inc() }
 func (m *Metrics) RecordLLMDuration(d time.Duration)   { m.llmDuration.Observe(d.Seconds()) }
 func (m *Metrics) RecordStoreError()                   { m.storeErrors.Inc() }
 func (m *Metrics) RecordEmbedDuration(d time.Duration) { m.embedLatency.Observe(d.Seconds()) }
-func (m *Metrics) RecordBreakerTrip(component string)  { m.breakerTrips.WithLabelValues(component).Inc() }
+func (m *Metrics) RecordBreakerTrip(component string) {
+	m.breakerTrips.WithLabelValues(component).Inc()
+}
 
 func Handler() http.Handler { return promhttp.Handler() }
-

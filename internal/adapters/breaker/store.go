@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/sony/gobreaker"
@@ -11,8 +12,8 @@ import (
 
 type StoreConfig struct {
 	MaxRequests      uint32
-	Interval         gobreaker.DurationFunc
-	Timeout          gobreaker.DurationFunc
+	Interval         time.Duration
+	Timeout          time.Duration
 	FailureThreshold uint32
 }
 
@@ -90,4 +91,3 @@ func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 	return s.inner.EnsureCollection(ctx, dimension)
 }
-

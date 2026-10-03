@@ -7,8 +7,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -173,4 +173,3 @@ func sortCandidates(hits []candidate) {
 		}
 	}
 }
-

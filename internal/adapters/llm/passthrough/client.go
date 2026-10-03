@@ -104,4 +104,3 @@ func marshalRequest(req domain.LLMRequest) ([]byte, error) {
 	}
 	return data, nil
 }
-

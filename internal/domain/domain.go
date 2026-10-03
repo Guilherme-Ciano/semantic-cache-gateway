@@ -79,4 +79,3 @@ type MCPToolPort interface {
 	Call(ctx context.Context, name string, args map[string]any) (map[string]any, error)
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
 }
-

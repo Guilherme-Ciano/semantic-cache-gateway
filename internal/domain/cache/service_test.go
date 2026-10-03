@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain/cache"
+	"github.com/google/uuid"
 )
 
 type mockEmbedder struct {
@@ -63,12 +64,14 @@ type mockMetrics struct {
 	embedDurations []time.Duration
 }
 
-func (m *mockMetrics) RecordCacheHit()                     { m.hits++ }
-func (m *mockMetrics) RecordCacheMiss()                    { m.misses++ }
-func (m *mockMetrics) RecordLLMDuration(d time.Duration)   { m.llmDurations = append(m.llmDurations, d) }
-func (m *mockMetrics) RecordStoreError()                   { m.storeErrors++ }
-func (m *mockMetrics) RecordEmbedDuration(d time.Duration) { m.embedDurations = append(m.embedDurations, d) }
-func (m *mockMetrics) RecordBreakerTrip(_ string)          {}
+func (m *mockMetrics) RecordCacheHit()                   { m.hits++ }
+func (m *mockMetrics) RecordCacheMiss()                  { m.misses++ }
+func (m *mockMetrics) RecordLLMDuration(d time.Duration) { m.llmDurations = append(m.llmDurations, d) }
+func (m *mockMetrics) RecordStoreError()                 { m.storeErrors++ }
+func (m *mockMetrics) RecordEmbedDuration(d time.Duration) {
+	m.embedDurations = append(m.embedDurations, d)
+}
+func (m *mockMetrics) RecordBreakerTrip(_ string) {}
 
 var defaultVec = domain.Vector{0.1, 0.2, 0.3, 0.4}
 
@@ -166,7 +169,7 @@ func TestHandle(t *testing.T) {
 			wantLLMCalls:  1,
 		},
 		{
-			name: "highest-scored candidate selected when multiple hits returned",
+			name:     "highest-scored candidate selected when multiple hits returned",
 			embedVec: defaultVec,
 			storeResults: []domain.CacheEntry{
 				cachedEntry("Paris (best)", 0.98),
@@ -310,4 +313,3 @@ func TestExtractQueryText(t *testing.T) {
 		})
 	}
 }
-

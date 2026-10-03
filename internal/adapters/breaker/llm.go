@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/sony/gobreaker"
@@ -12,8 +13,8 @@ import (
 
 type LLMConfig struct {
 	MaxRequests      uint32
-	Interval         gobreaker.DurationFunc
-	Timeout          gobreaker.DurationFunc
+	Interval         time.Duration
+	Timeout          time.Duration
 	FailureThreshold uint32
 }
 
@@ -79,4 +80,3 @@ func isOpenErr(err error) bool {
 	return errors.Is(err, gobreaker.ErrOpenState) ||
 		errors.Is(err, gobreaker.ErrTooManyRequests)
 }
-
