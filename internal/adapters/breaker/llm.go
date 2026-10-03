@@ -7,8 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/sony/gobreaker"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 type LLMConfig struct {

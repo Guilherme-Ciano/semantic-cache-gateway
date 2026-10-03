@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/google/uuid"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 type Result struct {

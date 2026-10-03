@@ -7,9 +7,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 const entryPrefix = "scg:entry:"

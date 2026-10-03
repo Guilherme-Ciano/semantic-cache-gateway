@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/google/uuid"
 	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 const (

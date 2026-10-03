@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	oai "github.com/sashabaranov/go-openai"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 type Client struct {

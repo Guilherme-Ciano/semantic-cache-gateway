@@ -54,7 +54,7 @@ func TestRateLimiterMiddleware(t *testing.T) {
 
 			for i, want := range tc.wantStatus {
 				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 				req.RemoteAddr = "192.0.2.1:1234"
 
 				handler.ServeHTTP(rec, req)
@@ -107,7 +107,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 			)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 
 			handler.ServeHTTP(rec, req)
 

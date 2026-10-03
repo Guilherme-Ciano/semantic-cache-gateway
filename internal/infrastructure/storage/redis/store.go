@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
+
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 const (

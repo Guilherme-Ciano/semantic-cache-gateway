@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/adapters/breaker"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/adapters/embedder/openaiembedder"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/adapters/llm/openaillm"
@@ -22,8 +25,6 @@ import (
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/pkg/config"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/pkg/logger"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/pkg/telemetry"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var version = "dev"

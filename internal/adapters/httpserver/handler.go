@@ -9,11 +9,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain/cache"
 	"github.com/Guilherme-Ciano/semantic-cache-gateway/pkg/telemetry"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 const (
