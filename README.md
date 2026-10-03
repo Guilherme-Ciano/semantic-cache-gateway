@@ -1,240 +1,228 @@
-# Semantic Cache Gateway for RAG
+# Semantic Cache Gateway
 
-A high-performance semantic caching proxy between RAG applications and LLM APIs. Instead of forwarding every request to an expensive language model, the gateway embeds incoming queries, searches a vector store for semantically equivalent past queries, and returns cached answers when similarity exceeds a configurable threshold.
+> An OpenAI-compatible semantic caching proxy for RAG pipelines — intercepts LLM requests, matches semantically equivalent queries via Redis Vector Similarity Search, and returns cached responses with sub-10ms latency.
 
----
-
-## Data Flow
-
-```
-Client Request
-      │
-      ▼
- ┌─────────────────────────────────────────────────────┐
- │               HTTP Gateway (:8080)                  │
- │  POST /v1/chat/completions  (OpenAI-compatible)     │
- └──────────────────────┬──────────────────────────────┘
-                        │
-                        ▼
-             ┌─────────────────┐
-             │  Embed query    │  → EmbedderPort (OpenAI / local)
-             └────────┬────────┘
-                      │ vector (float32[])
-                      ▼
-         ┌────────────────────────┐
-         │  Vector similarity     │  cosine search, k=5
-         │  search in VectorDB    │  → VectorStorePort (Qdrant / Redis)
-         └───────────┬────────────┘
-                     │
-          ┌──────────┴──────────┐
-          │                     │
-    score ≥ threshold      score < threshold
-          │                     │
-          ▼                     ▼
-    ┌──────────┐        ┌──────────────────┐
-    │  Cache   │        │ Forward to LLM   │ → LLMPort (OpenAI / passthrough)
-    │  HIT ✓   │        │                  │
-    └──────────┘        └────────┬─────────┘
-          │                      │
-          │              ┌───────▼──────────┐
-          │              │ Async upsert     │  embed + store in VectorDB
-          │              │ into VectorDB    │
-          │              └──────────────────┘
-          │                      │
-          └──────────┬───────────┘
-                     ▼
-              Response to Client
-              X-Cache: HIT | MISS
-              X-Cache-Entry-Id: <uuid>
-              X-Cache-Score: 0.9742  (on HIT)
-```
+![CI](https://img.shields.io/github/actions/workflow/status/guilhermebr/semantic-cache-gateway/ci.yml?branch=master&style=flat-square&color=333333&label=ci&logo=githubactions&logoColor=white)
+![Go](https://img.shields.io/badge/go-v1.23+-333333?style=flat-square&logo=go&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-333333?style=flat-square)
+![MCP Ready](https://img.shields.io/badge/MCP-ready-333333?style=flat-square)
 
 ---
 
-## Project Layout
+## The Concept
 
-```
-semantic-cache-gateway/
-├── cmd/
-│   └── gateway/
-│       └── main.go              # composition root, DI wiring
-├── internal/
-│   ├── app/
-│   │   └── app.go               # lifecycle management
-│   ├── domain/
-│   │   ├── domain.go            # entities + port interfaces (no infra)
-│   │   └── cache/
-│   │       ├── service.go       # core cache logic
-│   │       └── service_test.go
-│   └── adapters/
-│       ├── httpserver/
-│       │   ├── handler.go       # OpenAI-compatible HTTP layer
-│       │   └── middleware.go
-│       ├── embedder/
-│       │   └── openaiembedder/  # EmbedderPort → OpenAI Embeddings API
-│       ├── llm/
-│       │   ├── openaillm/       # LLMPort → OpenAI Chat Completions
-│       │   └── passthrough/     # LLMPort → raw HTTP proxy
-│       └── vectordb/
-│           ├── qdrant/          # VectorStorePort → Qdrant gRPC
-│           └── redisstore/      # VectorStorePort → Redis KV + cosine scan
-├── pkg/
-│   ├── config/                  # YAML + env configuration
-│   └── logger/                  # zap wrapper
-├── config.example.yaml
-├── docker-compose.yml
-├── Dockerfile
-└── go.mod
+RAG pipelines repeatedly ask the same questions with slightly different phrasings — *"What is the refund policy?"* and *"How do I get a refund?"* are semantically identical but lexically distinct. The gateway sits between your application and the LLM provider: every incoming request is embedded into a dense vector, compared against a Redis Stack HNSW index via cosine similarity, and if a sufficiently similar prior answer exists (configurable threshold, default `0.92`), it is returned immediately — no LLM call, no billing, no latency. On a cache miss the upstream call is proxied normally, the response is persisted asynchronously alongside its embedding, and the entry's TTL is renewed on each subsequent hit.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    C(["Client\nRAG / Agent"])
+
+    subgraph GW ["Gateway  :8080"]
+        direction TB
+        RL["Rate Limiter\nToken Bucket / IP"]
+        TO["Timeout MW\nContext Cancel"]
+        H["/v1/chat/completions"]
+        RL --> TO --> H
+    end
+
+    subgraph INFRA ["Infrastructure"]
+        direction TB
+        EMB["Embedder\nOpenAI / local"]
+        CB1(["Circuit\nBreaker"])
+        CB2(["Circuit\nBreaker"])
+        VS[("Redis Stack\nHNSW · COSINE")]
+        LLM["Upstream LLM\nOpenAI / passthrough"]
+    end
+
+    C -->|"POST /v1/chat/completions"| GW
+    H --> EMB
+    EMB --> CB1 --> VS
+
+    VS -->|"similarity ≥ threshold\nX-Semantic-Cache: HIT"| C
+    VS -->|"similarity < threshold"| CB2 --> LLM
+
+    LLM -->|"response"| C
+    LLM -.->|"async upsert\n+ EXPIREAT"| VS
+
+    style VS fill:#111,stroke:#444,color:#ccc
+    style GW fill:#0d0d0d,stroke:#333,color:#eee
+    style INFRA fill:#0d0d0d,stroke:#333,color:#eee
 ```
 
 ---
 
-## Prerequisites
+## Core Features
 
-- Docker ≥ 24 and Docker Compose v2
-- An OpenAI API key (or any compatible embedding + LLM endpoint)
+- **Clean Architecture** — domain ports are pure interfaces; infrastructure adapters (Redis, Qdrant, OpenAI) are fully interchangeable without touching business logic
+- **Redis Stack VSS with Dynamic TTL** — HNSW index over COSINE distance, little-endian `float32` binary encoding; every cache hit triggers a background `EXPIRE` refresh, keeping hot entries alive and cold entries auto-evicted
+- **Circuit Breaker & Fallback** — `sony/gobreaker` decorators wrap LLM and vector store adapters; a tripped vector store circuit transparently falls back to the LLM, a tripped LLM circuit returns `503` immediately — no cascading failures
+- **Native Observability** — Prometheus metrics (`scg_semantic_cache_hits_total`, `scg_llm_request_duration_seconds`, `scg_circuit_breaker_trips_total{component}`), structured JSON logging via `log/slog`, all at `/metrics`
+- **Drop-in OpenAI Replacement** — `POST /v1/chat/completions` accepts the standard request shape; change only the `base_url` in your existing client
 
 ---
 
-## Setup
+## Quick Start
 
 ```bash
-git clone https://github.com/guilhermebr/semantic-cache-gateway
+git clone https://github.com/guilhermebr/semantic-cache-gateway.git
 cd semantic-cache-gateway
 
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY=sk-...
+# Set SCG_LLM_API_KEY and SCG_EMBEDDER_API_KEY in .env
 
-docker compose up --build -d
+docker compose up -d
 ```
 
-Verify the stack is healthy:
+Services started:
+
+| Service    | Port   | Purpose                    |
+|------------|--------|----------------------------|
+| gateway    | `8080` | API + `/metrics` + `/healthz` |
+| redis-stack | `6379` | Vector store + cache       |
+| prometheus | `9090` | Metrics scraping           |
 
 ```bash
+# Verify
 curl http://localhost:8080/healthz
 # {"status":"ok"}
 ```
 
 ---
 
-## Configuration
+## Usage
 
-All settings can be provided via a YAML file (`-config` flag) or environment variables. Environment variables always take precedence.
-
-| Env var | Default | Description |
-|---|---|---|
-| `SERVER_ADDR` | `:8080` | Listen address |
-| `CACHE_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity for a cache hit `(0, 1]` |
-| `CACHE_TTL` | `24h` | How long entries live in the vector store |
-| `EMBEDDER_PROVIDER` | `openai` | `openai` |
-| `EMBEDDER_MODEL` | `text-embedding-3-small` | Any OpenAI embedding model |
-| `EMBEDDER_API_KEY` | — | OpenAI key for embeddings |
-| `LLM_PROVIDER` | `openai` | `openai` \| `passthrough` |
-| `LLM_MODEL` | `gpt-4o-mini` | Upstream model name |
-| `LLM_API_KEY` | — | OpenAI key for completions |
-| `LLM_UPSTREAM_URL` | — | Used only by `passthrough` provider |
-| `VECTORDB_PROVIDER` | `qdrant` | `qdrant` \| `redis` |
-| `QDRANT_HOST` | `localhost` | Qdrant hostname |
-| `QDRANT_COLLECTION` | `rag_cache` | Collection name |
-| `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
-
----
-
-## Usage Examples
-
-### First request — cache MISS
-
-The query has never been seen. The gateway forwards to OpenAI, stores the result, and returns it:
+### Request
 
 ```bash
-curl -s -i http://localhost:8080/v1/chat/completions \
+curl -si -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",
     "messages": [
-      {"role": "user", "content": "What is the capital of France?"}
+      { "role": "user", "content": "What is retrieval-augmented generation?" }
     ]
   }'
 ```
 
-Expected response headers:
+### Response — Cache MISS (first call, ~400ms)
 
 ```
 HTTP/1.1 200 OK
 Content-Type: application/json
 X-Cache: MISS
-X-Cache-Entry-Id: 3f2504e0-4f89-11d3-9a0c-0305e82c3301
+X-Semantic-Cache: MISS
+X-Cache-Entry-Id: 550e8400-e29b-41d4-a716-446655440000
+X-Request-Latency-Ms: 412
 ```
 
 ```json
 {
-  "id": "scg-1709123456789",
+  "id": "scg-1727912034000000000",
   "object": "chat.completion",
-  "created": 1709123456,
+  "created": 1727912034,
   "model": "gpt-4o-mini",
-  "choices": [
-    {
-      "index": 0,
-      "message": {"role": "assistant", "content": "The capital of France is Paris."},
-      "finish_reason": "stop"
-    }
-  ]
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "Retrieval-Augmented Generation (RAG) is an AI architecture that combines..."
+    },
+    "finish_reason": "stop"
+  }]
 }
 ```
 
----
-
-### Second request — cache HIT
-
-A semantically equivalent (but not identical) query now hits the cache:
+### Response — Cache HIT (semantically equivalent query, ~8ms)
 
 ```bash
-curl -s -i http://localhost:8080/v1/chat/completions \
+# Semantically equivalent — different phrasing, same intent
+curl -si -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",
     "messages": [
-      {"role": "user", "content": "Which city is the capital of France?"}
+      { "role": "user", "content": "Can you explain what RAG stands for in AI?" }
     ]
   }'
 ```
-
-Expected response headers:
 
 ```
 HTTP/1.1 200 OK
 Content-Type: application/json
 X-Cache: HIT
-X-Cache-Entry-Id: 3f2504e0-4f89-11d3-9a0c-0305e82c3301
+X-Semantic-Cache: HIT
+X-Cache-Entry-Id: 550e8400-e29b-41d4-a716-446655440000
+X-Similarity-Score: 0.9742
 X-Cache-Score: 0.9742
+X-Request-Latency-Ms: 8
 ```
 
-The response body is identical to the first call, returned in microseconds with **zero LLM cost**.
+> **Agent instrumentation** — autonomous agents and orchestration frameworks (LangChain, AutoGen, CrewAI) can read `X-Semantic-Cache`, `X-Similarity-Score`, and `X-Request-Latency-Ms` to decide whether to re-query with a lower threshold, log cache efficiency, or trigger active invalidation.
 
 ---
 
-## Running Tests
+## Configuration
+
+The gateway is configured by three overlapping sources (lowest → highest precedence):
+
+```
+defaults → config.yaml → environment variables (SCG_*)
+```
 
 ```bash
-go test ./...
+# Start with a custom config file
+gateway --config /etc/scg/config.yaml
+
+# Override individual values
+gateway --addr :9000 --threshold 0.88 --log-level debug
+
+# 100% environment-driven (CI/CD, Kubernetes)
+SCG_LLM_API_KEY=sk-...          \
+SCG_EMBEDDER_API_KEY=sk-...     \
+SCG_VECTORDB_PROVIDER=redis-stack \
+SCG_SERVER_ADDR=:8080           \
+gateway
+```
+
+### Key environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `SCG_LLM_API_KEY` | — | OpenAI / compatible API key |
+| `SCG_EMBEDDER_API_KEY` | — | Embedding model API key |
+| `SCG_CACHE_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity for a HIT |
+| `SCG_VECTORDB_PROVIDER` | `redis-stack` | `redis-stack` \| `qdrant` \| `redis` |
+| `SCG_CIRCUIT_BREAKER_LLM_FAILURE_THRESHOLD` | `5` | Consecutive LLM failures before open |
+| `SCG_SERVER_RATE_LIMIT_RPS` | `10` | Sustained requests/s per IP |
+
+Full reference: [`config.example.yaml`](config.example.yaml)
+
+---
+
+## Development
+
+```bash
+make test           # go test -race -count=1 ./...
+make test-coverage  # generates coverage.html
+make lint           # golangci-lint
+make build          # bin/gateway (static, CGO_ENABLED=0)
+make help           # all targets
 ```
 
 ---
 
-## Adding a Custom Adapter
+## Roadmap
 
-The system is built around three port interfaces in [`internal/domain/domain.go`](internal/domain/domain.go):
-
-| Interface | Implement to add… |
-|---|---|
-| `EmbedderPort` | A new embedding model (Cohere, Mistral, local) |
-| `VectorStorePort` | A new vector database (Pinecone, pgvector, Weaviate) |
-| `LLMPort` | A new LLM provider (Anthropic, Mistral, local vLLM) |
-
-Wire the new adapter in `cmd/gateway/main.go` — no other files need to change.
+- **[SSE Streaming]** Intercept LLM stream chunks, compose the full response in-flight for Redis persistence, and forward `text/event-stream` to the client without buffering delay
+- **[Multi-Tenancy]** Namespace-scoped Redis indexes (`tenant:<id>:idx`) for context isolation in multi-agent and multi-pipeline deployments
+- **[Cache Invalidation Webhook]** `DELETE /v1/cache/invalidate` endpoint accepting vector-space queries or explicit entry IDs to purge stale embeddings when the knowledge base changes
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
