@@ -22,6 +22,7 @@ func (m *mockEmbedder) Embed(_ context.Context, _ string) (domain.Vector, error)
 }
 
 type mockStore struct {
+	mu        sync.Mutex
 	results   []domain.CacheEntry
 	searchErr error
 	upsertErr error
@@ -29,10 +30,14 @@ type mockStore struct {
 }
 
 func (m *mockStore) Search(_ context.Context, _ domain.Vector, _ uint64, _ float64) ([]domain.CacheEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.results, m.searchErr
 }
 
 func (m *mockStore) Upsert(_ context.Context, e domain.CacheEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.upserted = append(m.upserted, e)
 	return m.upsertErr
 }
@@ -201,6 +206,7 @@ func TestHandle(t *testing.T) {
 			}
 
 			resp, result, err := svc.Handle(context.Background(), req)
+			svc.Drain()
 
 			if tc.wantErr {
 				if err == nil {
@@ -297,6 +303,7 @@ func TestExtractQueryText(t *testing.T) {
 
 			svc := newService(embedder, store, llm, rec)
 			_, _, err := svc.Handle(context.Background(), tc.req)
+			svc.Drain()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

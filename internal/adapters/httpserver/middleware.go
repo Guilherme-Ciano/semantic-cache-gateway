@@ -51,10 +51,10 @@ func TimeoutMiddleware(d time.Duration) func(http.Handler) http.Handler {
 			case <-ctx.Done():
 				tw.mu.Lock()
 				if !tw.written {
-					tw.ResponseWriter.Header().Set("Content-Type", "application/json")
-					tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
-					_, _ = tw.ResponseWriter.Write([]byte(`{"error":"upstream timeout"}`))
 					tw.written = true
+					tw.Header().Set("Content-Type", "application/json")
+					tw.WriteHeader(http.StatusGatewayTimeout)
+					_, _ = tw.ResponseWriter.Write([]byte(`{"error":"upstream timeout"}`))
 				}
 				tw.mu.Unlock()
 				<-done
@@ -67,6 +67,12 @@ type timeoutWriter struct {
 	http.ResponseWriter
 	mu      sync.Mutex
 	written bool
+}
+
+func (tw *timeoutWriter) Header() http.Header {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	return tw.ResponseWriter.Header()
 }
 
 func (tw *timeoutWriter) WriteHeader(code int) {
@@ -100,29 +106,25 @@ func RateLimiterMiddleware(rps float64, burst int) func(http.Handler) http.Handl
 		clients = make(map[string]*entry)
 	)
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			mu.Lock()
-			for ip, e := range clients {
-				if time.Since(e.lastSeen) > 10*time.Minute {
-					delete(clients, ip)
-				}
-			}
-			mu.Unlock()
-		}
-	}()
-
 	getLimiter := func(ip string) *rate.Limiter {
 		mu.Lock()
 		defer mu.Unlock()
+
+		now := time.Now()
+		if len(clients) > 100 {
+			for k, v := range clients {
+				if now.Sub(v.lastSeen) > 10*time.Minute {
+					delete(clients, k)
+				}
+			}
+		}
+
 		e, ok := clients[ip]
 		if !ok {
 			e = &entry{limiter: rate.NewLimiter(rate.Limit(rps), burst)}
 			clients[ip] = e
 		}
-		e.lastSeen = time.Now()
+		e.lastSeen = now
 		return e.limiter
 	}
 
