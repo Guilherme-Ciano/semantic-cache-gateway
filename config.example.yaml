@@ -25,7 +25,7 @@ llm:
   upstream_url: ""   # passthrough only
 
 vector_db:
-  provider: qdrant   # qdrant | redis
+  provider: redis-stack   # redis-stack (primary) | qdrant | redis (legacy scan)
   qdrant_host: localhost
   qdrant_port: 6334
   qdrant_collection: rag_cache

@@ -17,9 +17,15 @@ import (
 )
 
 const (
-	headerCacheStatus = "X-Cache"
-	headerEntryID     = "X-Cache-Entry-Id"
-	headerScore       = "X-Cache-Score"
+	// Standard cache protocol headers.
+	headerCacheStatus = "X-Cache"           // HIT | MISS
+	headerEntryID     = "X-Cache-Entry-Id"  // UUID of the matched or created entry
+
+	// Semantic-cache–specific headers — preferred by AI agents and orchestrators.
+	headerSemanticCache     = "X-Semantic-Cache"   // HIT | MISS
+	headerSimilarityScore   = "X-Similarity-Score" // cosine similarity [0, 1]
+	headerCacheLegacyScore  = "X-Cache-Score"      // kept for backward compat
+	headerRequestLatencyMs  = "X-Request-Latency-Ms"
 )
 
 // Config groups HTTP-layer tunables injected at construction time.
@@ -63,6 +69,8 @@ func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 // Chat Completions API. Any client targeting /v1/chat/completions can use
 // this gateway as a drop-in replacement by changing only the base URL.
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
 	var req openAIChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errBody("invalid request body: "+err.Error()))
@@ -86,10 +94,17 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		cacheStatus = "HIT"
 	}
 
+	// Standard cache headers (RFC-7234 convention).
 	w.Header().Set(headerCacheStatus, cacheStatus)
 	w.Header().Set(headerEntryID, result.Entry.ID.String())
+
+	// Semantic-cache–specific headers consumed by AI agents and orchestrators.
+	w.Header().Set(headerSemanticCache, cacheStatus)
+	w.Header().Set(headerRequestLatencyMs, strconv.FormatInt(time.Since(start).Milliseconds(), 10))
 	if result.IsHit {
-		w.Header().Set(headerScore, strconv.FormatFloat(float64(result.Entry.Score), 'f', 4, 32))
+		score := strconv.FormatFloat(float64(result.Entry.Score), 'f', 4, 32)
+		w.Header().Set(headerSimilarityScore, score)
+		w.Header().Set(headerCacheLegacyScore, score) // backward compat
 	}
 
 	writeJSON(w, http.StatusOK, toOpenAIResponse(resp, req.Model))

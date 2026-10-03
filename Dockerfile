@@ -9,20 +9,21 @@ RUN go mod download
 
 COPY . .
 
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
-    -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+    -ldflags="-s -w -X main.version=${VERSION}" \
     -trimpath \
-    -o /bin/gateway \
+    -o /app/gateway \
     ./cmd/gateway
 
-# ── Runtime stage ────────────────────────────────────────────────────────────
+# ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /bin/gateway /gateway
+COPY --from=builder /app/gateway /app/gateway
 
 EXPOSE 8080
 
-ENTRYPOINT ["/gateway"]
+ENTRYPOINT ["/app/gateway"]

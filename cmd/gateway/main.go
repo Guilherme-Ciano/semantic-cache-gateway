@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/internal/adapters/vectordb/redisstore"
 	"github.com/guilhermebr/semantic-cache-gateway/internal/app"
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	"github.com/guilhermebr/semantic-cache-gateway/internal/infrastructure/storage/redis"
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/config"
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/logger"
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/telemetry"
@@ -153,6 +154,25 @@ func buildVectorStore(cfg *config.Config, log *slog.Logger) (domain.VectorStoreP
 		return s, func() {
 			if err := s.Close(); err != nil {
 				log.Warn("closing redis store", slog.String("error", err.Error()))
+			}
+		}, nil
+
+	case "redis-stack":
+		s, err := redis.New(
+			cfg.VectorDB.RedisAddr,
+			cfg.VectorDB.RedisPassword,
+			cfg.VectorDB.RedisIndex,
+			cfg.VectorDB.RedisDB,
+			cfg.VectorDB.VectorDimension,
+			cfg.Cache.TTL,
+			log,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		return s, func() {
+			if err := s.Close(); err != nil {
+				log.Warn("closing redis stack store", slog.String("error", err.Error()))
 			}
 		}, nil
 
