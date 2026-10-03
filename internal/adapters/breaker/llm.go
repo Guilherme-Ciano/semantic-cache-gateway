@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	"github.com/sony/gobreaker"
 )
 

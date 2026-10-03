@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 )
 
 type Client struct {

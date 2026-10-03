@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guilhermebr/semantic-cache-gateway/internal/adapters/httpserver"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/adapters/httpserver"
 )
 
 func TestRateLimiterMiddleware(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

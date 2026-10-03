@@ -2,7 +2,7 @@
 
 > An OpenAI-compatible semantic caching proxy for RAG pipelines — intercepts LLM requests, matches semantically equivalent queries via Redis Vector Similarity Search, and returns cached responses with sub-10ms latency.
 
-![CI](https://img.shields.io/github/actions/workflow/status/guilhermebr/semantic-cache-gateway/ci.yml?branch=master&style=flat-square&color=333333&label=ci&logo=githubactions&logoColor=white)
+![CI](https://img.shields.io/github/actions/workflow/status/Guilherme-Ciano/semantic-cache-gateway/ci.yml?branch=master&style=flat-square&color=333333&label=ci&logo=githubactions&logoColor=white)
 ![Go](https://img.shields.io/badge/go-v1.23+-333333?style=flat-square&logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-333333?style=flat-square)
 ![MCP Ready](https://img.shields.io/badge/MCP-ready-333333?style=flat-square)
@@ -11,7 +11,7 @@
 
 ## The Concept
 
-RAG pipelines repeatedly ask the same questions with slightly different phrasings — *"What is the refund policy?"* and *"How do I get a refund?"* are semantically identical but lexically distinct. The gateway sits between your application and the LLM provider: every incoming request is embedded into a dense vector, compared against a Redis Stack HNSW index via cosine similarity, and if a sufficiently similar prior answer exists (configurable threshold, default `0.92`), it is returned immediately — no LLM call, no billing, no latency. On a cache miss the upstream call is proxied normally, the response is persisted asynchronously alongside its embedding, and the entry's TTL is renewed on each subsequent hit.
+RAG pipelines repeatedly ask the same questions with slightly different phrasings — _"What is the refund policy?"_ and _"How do I get a refund?"_ are semantically identical but lexically distinct. The gateway sits between your application and the LLM provider: every incoming request is embedded into a dense vector, compared against a Redis Stack HNSW index via cosine similarity, and if a sufficiently similar prior answer exists (configurable threshold, default `0.92`), it is returned immediately — no LLM call, no billing, no latency. On a cache miss the upstream call is proxied normally, the response is persisted asynchronously alongside its embedding, and the entry's TTL is renewed on each subsequent hit.
 
 ---
 
@@ -68,7 +68,7 @@ flowchart LR
 ## Quick Start
 
 ```bash
-git clone https://github.com/guilhermebr/semantic-cache-gateway.git
+git clone https://github.com/Guilherme-Ciano/semantic-cache-gateway.git
 cd semantic-cache-gateway
 
 cp .env.example .env
@@ -79,11 +79,11 @@ docker compose up -d
 
 Services started:
 
-| Service    | Port   | Purpose                    |
-|------------|--------|----------------------------|
-| gateway    | `8080` | API + `/metrics` + `/healthz` |
-| redis-stack | `6379` | Vector store + cache       |
-| prometheus | `9090` | Metrics scraping           |
+| Service     | Port   | Purpose                       |
+| ----------- | ------ | ----------------------------- |
+| gateway     | `8080` | API + `/metrics` + `/healthz` |
+| redis-stack | `6379` | Vector store + cache          |
+| prometheus  | `9090` | Metrics scraping              |
 
 ```bash
 # Verify
@@ -125,14 +125,16 @@ X-Request-Latency-Ms: 412
   "object": "chat.completion",
   "created": 1727912034,
   "model": "gpt-4o-mini",
-  "choices": [{
-    "index": 0,
-    "message": {
-      "role": "assistant",
-      "content": "Retrieval-Augmented Generation (RAG) is an AI architecture that combines..."
-    },
-    "finish_reason": "stop"
-  }]
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Retrieval-Augmented Generation (RAG) is an AI architecture that combines..."
+      },
+      "finish_reason": "stop"
+    }
+  ]
 }
 ```
 
@@ -190,14 +192,14 @@ gateway
 
 ### Key environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `SCG_LLM_API_KEY` | — | OpenAI / compatible API key |
-| `SCG_EMBEDDER_API_KEY` | — | Embedding model API key |
-| `SCG_CACHE_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity for a HIT |
-| `SCG_VECTORDB_PROVIDER` | `redis-stack` | `redis-stack` \| `qdrant` \| `redis` |
-| `SCG_CIRCUIT_BREAKER_LLM_FAILURE_THRESHOLD` | `5` | Consecutive LLM failures before open |
-| `SCG_SERVER_RATE_LIMIT_RPS` | `10` | Sustained requests/s per IP |
+| Variable                                    | Default       | Description                          |
+| ------------------------------------------- | ------------- | ------------------------------------ |
+| `SCG_LLM_API_KEY`                           | —             | OpenAI / compatible API key          |
+| `SCG_EMBEDDER_API_KEY`                      | —             | Embedding model API key              |
+| `SCG_CACHE_SIMILARITY_THRESHOLD`            | `0.92`        | Minimum cosine similarity for a HIT  |
+| `SCG_VECTORDB_PROVIDER`                     | `redis-stack` | `redis-stack` \| `qdrant` \| `redis` |
+| `SCG_CIRCUIT_BREAKER_LLM_FAILURE_THRESHOLD` | `5`           | Consecutive LLM failures before open |
+| `SCG_SERVER_RATE_LIMIT_RPS`                 | `10`          | Sustained requests/s per IP          |
 
 Full reference: [`config.example.yaml`](config.example.yaml)
 

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain/cache"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain/cache"
 )
 
 type mockEmbedder struct {

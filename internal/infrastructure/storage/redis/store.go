@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	"github.com/Guilherme-Ciano/semantic-cache-gateway/internal/domain"
 	goredis "github.com/redis/go-redis/v9"
 )
 

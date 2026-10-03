@@ -1,4 +1,4 @@
-module github.com/guilhermebr/semantic-cache-gateway
+module github.com/Guilherme-Ciano/semantic-cache-gateway
 
 go 1.23
 
