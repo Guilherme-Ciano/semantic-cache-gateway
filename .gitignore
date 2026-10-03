@@ -1,0 +1,18 @@
+.env
+*.env
+
+# Build artifacts
+bin/
+dist/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Go
+vendor/

@@ -1,0 +1,39 @@
+server:
+  addr: ":8080"
+  read_timeout: 30s
+  write_timeout: 60s
+  shutdown_timeout: 15s
+
+cache:
+  similarity_threshold: 0.92
+  ttl: 24h
+  max_candidates: 5
+
+embedder:
+  provider: openai
+  model: text-embedding-3-small
+  api_key: ""        # override via EMBEDDER_API_KEY
+  base_url: ""       # leave empty for official OpenAI endpoint
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  api_key: ""        # override via LLM_API_KEY
+  base_url: ""
+  upstream_url: ""   # used only by the passthrough provider
+
+vector_db:
+  provider: qdrant   # "qdrant" | "redis"
+  qdrant_host: localhost
+  qdrant_port: 6334
+  qdrant_collection: rag_cache
+  qdrant_api_key: ""
+  redis_addr: localhost:6379
+  redis_password: ""
+  redis_db: 0
+  redis_index: rag_cache_idx
+  vector_dimension: 1536
+
+telemetry:
+  log_level: info
+  metrics_addr: ":9090"
