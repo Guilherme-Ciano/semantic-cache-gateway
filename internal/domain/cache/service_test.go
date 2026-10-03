@@ -65,6 +65,7 @@ func (m *mockMetrics) RecordCacheMiss()                     { m.misses++ }
 func (m *mockMetrics) RecordLLMDuration(d time.Duration)    { m.llmDurations = append(m.llmDurations, d) }
 func (m *mockMetrics) RecordStoreError()                    { m.storeErrors++ }
 func (m *mockMetrics) RecordEmbedDuration(d time.Duration)  { m.embedDurations = append(m.embedDurations, d) }
+func (m *mockMetrics) RecordBreakerTrip(_ string)           {}
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 

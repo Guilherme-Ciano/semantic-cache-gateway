@@ -2,98 +2,94 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
+// Config is the root application configuration structure.
+// Tags: yaml (config file), mapstructure (viper deserialization).
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Cache     CacheConfig     `yaml:"cache"`
-	Embedder  EmbedderConfig  `yaml:"embedder"`
-	LLM       LLMConfig       `yaml:"llm"`
-	VectorDB  VectorDBConfig  `yaml:"vector_db"`
-	Telemetry TelemetryConfig `yaml:"telemetry"`
+	Server    ServerConfig    `yaml:"server"         mapstructure:"server"`
+	Cache     CacheConfig     `yaml:"cache"          mapstructure:"cache"`
+	Embedder  EmbedderConfig  `yaml:"embedder"       mapstructure:"embedder"`
+	LLM       LLMConfig       `yaml:"llm"            mapstructure:"llm"`
+	VectorDB  VectorDBConfig  `yaml:"vector_db"      mapstructure:"vector_db"`
+	Breaker   BreakerConfig   `yaml:"circuit_breaker" mapstructure:"circuit_breaker"`
+	Telemetry TelemetryConfig `yaml:"telemetry"      mapstructure:"telemetry"`
 }
 
 type ServerConfig struct {
-	Addr            string        `yaml:"addr"`
-	ReadTimeout     time.Duration `yaml:"read_timeout"`
-	WriteTimeout    time.Duration `yaml:"write_timeout"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	Addr            string        `yaml:"addr"              mapstructure:"addr"`
+	ReadTimeout     time.Duration `yaml:"read_timeout"      mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `yaml:"write_timeout"     mapstructure:"write_timeout"`
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"  mapstructure:"shutdown_timeout"`
 	// RateLimitRPS is the sustained request rate per IP (token bucket).
-	RateLimitRPS   float64 `yaml:"rate_limit_rps"`
+	RateLimitRPS   float64 `yaml:"rate_limit_rps"    mapstructure:"rate_limit_rps"`
 	// RateLimitBurst is the maximum burst size above RateLimitRPS.
-	RateLimitBurst int     `yaml:"rate_limit_burst"`
+	RateLimitBurst int     `yaml:"rate_limit_burst"  mapstructure:"rate_limit_burst"`
 }
 
 type CacheConfig struct {
 	// SimilarityThreshold is the minimum cosine similarity [0,1] for a cache hit.
-	SimilarityThreshold float64       `yaml:"similarity_threshold"`
-	TTL                 time.Duration `yaml:"ttl"`
-	MaxCandidates       uint64        `yaml:"max_candidates"`
+	SimilarityThreshold float64       `yaml:"similarity_threshold" mapstructure:"similarity_threshold"`
+	TTL                 time.Duration `yaml:"ttl"                  mapstructure:"ttl"`
+	MaxCandidates       uint64        `yaml:"max_candidates"       mapstructure:"max_candidates"`
 }
 
 type EmbedderConfig struct {
-	Provider string `yaml:"provider"` // "openai"
-	Model    string `yaml:"model"`
-	APIKey   string `yaml:"api_key"`
-	BaseURL  string `yaml:"base_url"`
+	Provider string `yaml:"provider" mapstructure:"provider"` // "openai"
+	Model    string `yaml:"model"    mapstructure:"model"`
+	APIKey   string `yaml:"api_key"  mapstructure:"api_key"`
+	BaseURL  string `yaml:"base_url" mapstructure:"base_url"`
 }
 
 type LLMConfig struct {
-	Provider    string `yaml:"provider"` // "openai" | "passthrough"
-	Model       string `yaml:"model"`
-	APIKey      string `yaml:"api_key"`
-	BaseURL     string `yaml:"base_url"`
-	UpstreamURL string `yaml:"upstream_url"`
+	Provider    string `yaml:"provider"     mapstructure:"provider"` // "openai" | "passthrough"
+	Model       string `yaml:"model"        mapstructure:"model"`
+	APIKey      string `yaml:"api_key"      mapstructure:"api_key"`
+	BaseURL     string `yaml:"base_url"     mapstructure:"base_url"`
+	UpstreamURL string `yaml:"upstream_url" mapstructure:"upstream_url"`
 }
 
 type VectorDBConfig struct {
-	Provider         string `yaml:"provider"` // "qdrant" | "redis"
-	QdrantHost       string `yaml:"qdrant_host"`
-	QdrantPort       int    `yaml:"qdrant_port"`
-	QdrantCollection string `yaml:"qdrant_collection"`
-	QdrantAPIKey     string `yaml:"qdrant_api_key"`
-	RedisAddr        string `yaml:"redis_addr"`
-	RedisPassword    string `yaml:"redis_password"`
-	RedisDB          int    `yaml:"redis_db"`
-	RedisIndex       string `yaml:"redis_index"`
-	VectorDimension  uint64 `yaml:"vector_dimension"`
+	Provider         string `yaml:"provider"          mapstructure:"provider"` // "qdrant" | "redis"
+	QdrantHost       string `yaml:"qdrant_host"       mapstructure:"qdrant_host"`
+	QdrantPort       int    `yaml:"qdrant_port"       mapstructure:"qdrant_port"`
+	QdrantCollection string `yaml:"qdrant_collection" mapstructure:"qdrant_collection"`
+	QdrantAPIKey     string `yaml:"qdrant_api_key"    mapstructure:"qdrant_api_key"`
+	RedisAddr        string `yaml:"redis_addr"        mapstructure:"redis_addr"`
+	RedisPassword    string `yaml:"redis_password"    mapstructure:"redis_password"`
+	RedisDB          int    `yaml:"redis_db"          mapstructure:"redis_db"`
+	RedisIndex       string `yaml:"redis_index"       mapstructure:"redis_index"`
+	VectorDimension  uint64 `yaml:"vector_dimension"  mapstructure:"vector_dimension"`
+}
+
+// BreakerConfig holds circuit breaker settings for each protected component.
+type BreakerConfig struct {
+	LLM      ComponentBreakerConfig `yaml:"llm"       mapstructure:"llm"`
+	VectorDB ComponentBreakerConfig `yaml:"vector_db" mapstructure:"vector_db"`
+}
+
+// ComponentBreakerConfig parameterises a single circuit breaker instance.
+type ComponentBreakerConfig struct {
+	// MaxRequests is the number of probe requests allowed in half-open state.
+	MaxRequests uint32 `yaml:"max_requests" mapstructure:"max_requests"`
+	// Interval is the rolling window for the closed-state error rate.
+	Interval time.Duration `yaml:"interval" mapstructure:"interval"`
+	// Timeout is how long the breaker stays open before attempting half-open.
+	Timeout time.Duration `yaml:"timeout" mapstructure:"timeout"`
+	// FailureThreshold is the consecutive failure count that trips the breaker.
+	FailureThreshold uint32 `yaml:"failure_threshold" mapstructure:"failure_threshold"`
 }
 
 type TelemetryConfig struct {
-	LogLevel    string `yaml:"log_level"`
-	MetricsAddr string `yaml:"metrics_addr"`
+	LogLevel    string `yaml:"log_level"    mapstructure:"log_level"`
+	MetricsAddr string `yaml:"metrics_addr" mapstructure:"metrics_addr"`
 }
 
-// Load reads configuration from an optional YAML file and overlays env vars.
-func Load(path string) (*Config, error) {
-	cfg := defaults()
-
-	if path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("reading config file: %w", err)
-		}
-		if err := yaml.Unmarshal(data, cfg); err != nil {
-			return nil, fmt.Errorf("parsing config file: %w", err)
-		}
-	}
-
-	overlayEnv(cfg)
-
-	if err := validate(cfg); err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
-}
-
-func defaults() *Config {
+// Defaults returns a Config pre-populated with safe production-ready values.
+// Viper callers should pass each field to SetDefault before ReadInConfig.
+func Defaults() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Addr:            ":8080",
@@ -116,6 +112,20 @@ func defaults() *Config {
 			RedisAddr:        "localhost:6379",
 			RedisIndex:       "rag_cache_idx",
 		},
+		Breaker: BreakerConfig{
+			LLM: ComponentBreakerConfig{
+				MaxRequests:      3,
+				Interval:         60 * time.Second,
+				Timeout:          30 * time.Second,
+				FailureThreshold: 5,
+			},
+			VectorDB: ComponentBreakerConfig{
+				MaxRequests:      2,
+				Interval:         30 * time.Second,
+				Timeout:          10 * time.Second,
+				FailureThreshold: 3,
+			},
+		},
 		Telemetry: TelemetryConfig{
 			LogLevel:    "info",
 			MetricsAddr: ":9090",
@@ -123,67 +133,8 @@ func defaults() *Config {
 	}
 }
 
-func overlayEnv(cfg *Config) {
-	setStr := func(dst *string, key string) {
-		if v := os.Getenv(key); v != "" {
-			*dst = v
-		}
-	}
-	setFloat := func(dst *float64, key string) {
-		if v := os.Getenv(key); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				*dst = f
-			}
-		}
-	}
-	setInt := func(dst *int, key string) {
-		if v := os.Getenv(key); v != "" {
-			if i, err := strconv.Atoi(v); err == nil {
-				*dst = i
-			}
-		}
-	}
-	setDuration := func(dst *time.Duration, key string) {
-		if v := os.Getenv(key); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				*dst = d
-			}
-		}
-	}
-
-	setStr(&cfg.Server.Addr, "SERVER_ADDR")
-	setDuration(&cfg.Server.ReadTimeout, "SERVER_READ_TIMEOUT")
-	setDuration(&cfg.Server.WriteTimeout, "SERVER_WRITE_TIMEOUT")
-	setDuration(&cfg.Server.ShutdownTimeout, "SERVER_SHUTDOWN_TIMEOUT")
-	setFloat(&cfg.Server.RateLimitRPS, "RATE_LIMIT_RPS")
-	setInt(&cfg.Server.RateLimitBurst, "RATE_LIMIT_BURST")
-
-	setFloat(&cfg.Cache.SimilarityThreshold, "CACHE_SIMILARITY_THRESHOLD")
-	setDuration(&cfg.Cache.TTL, "CACHE_TTL")
-
-	setStr(&cfg.Embedder.Provider, "EMBEDDER_PROVIDER")
-	setStr(&cfg.Embedder.Model, "EMBEDDER_MODEL")
-	setStr(&cfg.Embedder.APIKey, "EMBEDDER_API_KEY")
-	setStr(&cfg.Embedder.BaseURL, "EMBEDDER_BASE_URL")
-
-	setStr(&cfg.LLM.Provider, "LLM_PROVIDER")
-	setStr(&cfg.LLM.Model, "LLM_MODEL")
-	setStr(&cfg.LLM.APIKey, "LLM_API_KEY")
-	setStr(&cfg.LLM.BaseURL, "LLM_BASE_URL")
-	setStr(&cfg.LLM.UpstreamURL, "LLM_UPSTREAM_URL")
-
-	setStr(&cfg.VectorDB.Provider, "VECTORDB_PROVIDER")
-	setStr(&cfg.VectorDB.QdrantHost, "QDRANT_HOST")
-	setStr(&cfg.VectorDB.QdrantCollection, "QDRANT_COLLECTION")
-	setStr(&cfg.VectorDB.QdrantAPIKey, "QDRANT_API_KEY")
-	setStr(&cfg.VectorDB.RedisAddr, "REDIS_ADDR")
-	setStr(&cfg.VectorDB.RedisPassword, "REDIS_PASSWORD")
-
-	setStr(&cfg.Telemetry.LogLevel, "LOG_LEVEL")
-	setStr(&cfg.Telemetry.MetricsAddr, "METRICS_ADDR")
-}
-
-func validate(cfg *Config) error {
+// Validate reports all constraint violations in a single error.
+func Validate(cfg *Config) error {
 	var errs []string
 
 	if cfg.Cache.SimilarityThreshold <= 0 || cfg.Cache.SimilarityThreshold > 1 {

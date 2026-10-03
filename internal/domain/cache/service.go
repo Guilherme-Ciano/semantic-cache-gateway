@@ -2,8 +2,10 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +29,7 @@ type Service struct {
 	ttl       time.Duration
 	limit     uint64
 	log       *slog.Logger
+	wg        sync.WaitGroup
 }
 
 // NewService constructs a Service with the required ports and cache parameters.
@@ -53,7 +56,9 @@ func NewService(
 }
 
 // Handle processes an LLM request through the semantic cache.
-// On a cache miss it calls the upstream LLM and asynchronously persists the result.
+// On a cache miss it calls the upstream LLM and schedules an asynchronous persist.
+// If the vector store circuit is open the call falls through to the LLM transparently.
+// If the LLM circuit is open ErrCircuitOpen propagates to the caller.
 func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, Result, error) {
 	queryText := extractQueryText(req)
 
@@ -67,9 +72,13 @@ func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLM
 	candidates, err := s.store.Search(ctx, embedding, s.limit, s.threshold)
 	if err != nil {
 		s.metrics.RecordStoreError()
-		s.log.WarnContext(ctx, "vector store search failed, falling through to LLM",
-			slog.String("error", err.Error()),
-		)
+		if errors.Is(err, domain.ErrCircuitOpen) {
+			s.log.WarnContext(ctx, "vector store circuit open, bypassing cache")
+		} else {
+			s.log.WarnContext(ctx, "vector store search failed, falling through to LLM",
+				slog.String("error", err.Error()),
+			)
+		}
 	}
 
 	if len(candidates) > 0 {
@@ -102,21 +111,34 @@ func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLM
 		ExpiresAt: time.Now().UTC().Add(s.ttl),
 	}
 
-	go s.persistAsync(entry)
+	s.schedulePersist(entry)
 
 	return resp, Result{Entry: entry, IsHit: false}, nil
 }
 
-func (s *Service) persistAsync(entry domain.CacheEntry) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+// Drain blocks until all in-flight async persist goroutines have completed.
+// Must be called during graceful shutdown before process exit.
+func (s *Service) Drain() {
+	s.wg.Wait()
+}
 
-	if err := s.store.Upsert(ctx, entry); err != nil {
-		s.log.Error("failed to persist cache entry",
-			slog.String("entry_id", entry.ID.String()),
-			slog.String("error", err.Error()),
-		)
-	}
+func (s *Service) schedulePersist(entry domain.CacheEntry) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := s.store.Upsert(ctx, entry); err != nil {
+			if !errors.Is(err, domain.ErrCircuitOpen) {
+				s.log.Error("failed to persist cache entry",
+					slog.String("entry_id", entry.ID.String()),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}()
 }
 
 // extractQueryText produces a canonical string from an LLMRequest for embedding.

@@ -18,6 +18,7 @@ import (
 // App owns the HTTP server and all wired dependencies.
 type App struct {
 	server          *http.Server
+	svc             *cache.Service
 	shutdownTimeout time.Duration
 	log             *slog.Logger
 }
@@ -54,18 +55,20 @@ func New(
 		Addr:         cfg.Server.Addr,
 		Handler:      handler,
 		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout + 5*time.Second, // headroom for timeout MW
+		WriteTimeout: cfg.Server.WriteTimeout + 5*time.Second,
 	}
 
 	return &App{
 		server:          srv,
+		svc:             svc,
 		shutdownTimeout: cfg.Server.ShutdownTimeout,
 		log:             log,
 	}, nil
 }
 
-// Run starts the HTTP server and blocks until ctx is cancelled, after which
-// it performs a graceful shutdown bounded by the configured timeout.
+// Run starts the HTTP server and blocks until ctx is cancelled.
+// On cancellation it performs a two-phase shutdown: first drains in-flight HTTP
+// requests, then waits for all pending async cache writes to complete.
 func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 
@@ -83,9 +86,18 @@ func (a *App) Run(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	a.log.Info("shutting down gracefully")
+	a.log.Info("signal received, starting graceful shutdown")
+
 	shutCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
 	defer cancel()
 
-	return a.server.Shutdown(shutCtx)
+	if err := a.server.Shutdown(shutCtx); err != nil {
+		a.log.Error("http shutdown error", slog.String("error", err.Error()))
+	}
+
+	a.log.Info("draining pending cache writes")
+	a.svc.Drain()
+	a.log.Info("shutdown complete")
+
+	return nil
 }

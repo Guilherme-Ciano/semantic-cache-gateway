@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,9 +24,9 @@ const (
 
 // Config groups HTTP-layer tunables injected at construction time.
 type Config struct {
-	RequestTimeout  time.Duration
-	RateLimitRPS    float64
-	RateLimitBurst  int
+	RequestTimeout time.Duration
+	RateLimitRPS   float64
+	RateLimitBurst int
 }
 
 // Handler holds the HTTP layer dependencies.
@@ -58,9 +59,9 @@ func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-// chatCompletions is the primary gateway endpoint. It accepts an OpenAI-
-// compatible chat request, queries the semantic cache, and either returns a
-// cached response or proxies the call to the upstream LLM.
+// chatCompletions is the primary gateway endpoint compatible with the OpenAI
+// Chat Completions API. Any client targeting /v1/chat/completions can use
+// this gateway as a drop-in replacement by changing only the base URL.
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	var req openAIChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -70,6 +71,11 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	resp, result, err := h.svc.Handle(r.Context(), toDomainRequest(req))
 	if err != nil {
+		if errors.Is(err, domain.ErrCircuitOpen) {
+			h.log.WarnContext(r.Context(), "LLM circuit open, returning 503")
+			writeJSON(w, http.StatusServiceUnavailable, errBody("service temporarily unavailable — upstream LLM circuit open"))
+			return
+		}
 		h.log.ErrorContext(r.Context(), "service error", slog.String("error", err.Error()))
 		writeJSON(w, http.StatusBadGateway, errBody("upstream error: "+err.Error()))
 		return

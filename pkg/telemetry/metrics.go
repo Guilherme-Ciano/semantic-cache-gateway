@@ -15,16 +15,15 @@ const namespace = "scg"
 
 // Metrics holds all instrumented Prometheus descriptors for the gateway.
 type Metrics struct {
-	cacheHits    prometheus.Counter
-	cacheMisses  prometheus.Counter
-	llmDuration  prometheus.Histogram
-	storeErrors  prometheus.Counter
-	embedLatency prometheus.Histogram
+	cacheHits     prometheus.Counter
+	cacheMisses   prometheus.Counter
+	llmDuration   prometheus.Histogram
+	storeErrors   prometheus.Counter
+	embedLatency  prometheus.Histogram
+	breakerTrips  *prometheus.CounterVec
 }
 
-// New registers all metrics with the default Prometheus registry and returns
-// a ready Metrics instance. Panic on registration conflict is acceptable at
-// startup; it indicates a wiring bug, not a runtime condition.
+// New registers all metrics with the default Prometheus registry.
 func New() *Metrics {
 	return &Metrics{
 		cacheHits: promauto.NewCounter(prometheus.CounterOpts{
@@ -46,7 +45,7 @@ func New() *Metrics {
 		storeErrors: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "vector_store_errors_total",
-			Help:      "Total number of errors returned by the vector store.",
+			Help:      "Total number of errors returned by the vector store (includes open-circuit fast-fails).",
 		}),
 		embedLatency: promauto.NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
@@ -54,6 +53,11 @@ func New() *Metrics {
 			Help:      "Latency of embedding calls in seconds.",
 			Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0},
 		}),
+		breakerTrips: promauto.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "circuit_breaker_trips_total",
+			Help:      "Total number of circuit breaker transitions to the open state, by component.",
+		}, []string{"component"}),
 	}
 }
 
@@ -64,19 +68,16 @@ func (m *Metrics) RecordCacheHit() { m.cacheHits.Inc() }
 func (m *Metrics) RecordCacheMiss() { m.cacheMisses.Inc() }
 
 // RecordLLMDuration records a completed LLM call latency.
-func (m *Metrics) RecordLLMDuration(d time.Duration) {
-	m.llmDuration.Observe(d.Seconds())
-}
+func (m *Metrics) RecordLLMDuration(d time.Duration) { m.llmDuration.Observe(d.Seconds()) }
 
 // RecordStoreError increments the vector store error counter.
 func (m *Metrics) RecordStoreError() { m.storeErrors.Inc() }
 
 // RecordEmbedDuration records an embedding call latency.
-func (m *Metrics) RecordEmbedDuration(d time.Duration) {
-	m.embedLatency.Observe(d.Seconds())
-}
+func (m *Metrics) RecordEmbedDuration(d time.Duration) { m.embedLatency.Observe(d.Seconds()) }
+
+// RecordBreakerTrip increments the circuit breaker trip counter for the given component.
+func (m *Metrics) RecordBreakerTrip(component string) { m.breakerTrips.WithLabelValues(component).Inc() }
 
 // Handler returns the standard Prometheus HTTP handler for /metrics.
-func Handler() http.Handler {
-	return promhttp.Handler()
-}
+func Handler() http.Handler { return promhttp.Handler() }
