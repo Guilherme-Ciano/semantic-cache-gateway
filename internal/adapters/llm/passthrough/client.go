@@ -1,7 +1,3 @@
-// Package passthrough implements domain.LLMPort by transparently forwarding
-// the raw HTTP request body to an upstream OpenAI-compatible endpoint and
-// streaming the response back. This is the preferred adapter when the gateway
-// is deployed as a pure proxy and must not re-serialise requests.
 package passthrough
 
 import (
@@ -16,14 +12,12 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
 )
 
-// Client forwards raw request payloads to the upstream LLM API.
 type Client struct {
 	upstream   string
 	apiKey     string
 	httpClient *http.Client
 }
 
-// New returns a passthrough Client.
 func New(upstreamURL, apiKey string) *Client {
 	return &Client{
 		upstream: upstreamURL,
@@ -34,8 +28,6 @@ func New(upstreamURL, apiKey string) *Client {
 	}
 }
 
-// Complete forwards the raw bytes in req.Raw to the upstream and returns the
-// parsed response content together with the original response body.
 func (c *Client) Complete(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, error) {
 	body := req.Raw
 	if len(body) == 0 {
@@ -112,3 +104,4 @@ func marshalRequest(req domain.LLMRequest) ([]byte, error) {
 	}
 	return data, nil
 }
+

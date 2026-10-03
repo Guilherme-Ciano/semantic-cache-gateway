@@ -11,7 +11,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// loggingMiddleware records method, path, status and latency for every request.
 func loggingMiddleware(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,9 +31,7 @@ func loggingMiddleware(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// TimeoutMiddleware cancels the request context after d and returns 504 if the
-// handler has not written a response. Unlike http.Server.WriteTimeout this
-// propagates context cancellation into handler code and adapter calls.
+// TimeoutMiddleware bounds request duration and cancels the request context on timeout.
 func TimeoutMiddleware(d time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +88,7 @@ func (tw *timeoutWriter) Write(b []byte) (int, error) {
 	return tw.ResponseWriter.Write(b)
 }
 
-// RateLimiterMiddleware implements per-IP token bucket rate limiting backed by
-// an in-memory map with periodic eviction of idle entries.
-// rps is the sustained throughput; burst allows temporary spikes.
+// RateLimiterMiddleware provides per-IP token bucket rate limiting.
 func RateLimiterMiddleware(rps float64, burst int) func(http.Handler) http.Handler {
 	type entry struct {
 		limiter  *rate.Limiter
@@ -150,3 +145,4 @@ func RateLimiterMiddleware(rps float64, burst int) func(http.Handler) http.Handl
 		})
 	}
 }
+

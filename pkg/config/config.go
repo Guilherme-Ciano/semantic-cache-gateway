@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// Config is the root application configuration structure.
-// Tags: yaml (config file), mapstructure (viper deserialization).
 type Config struct {
 	Server    ServerConfig    `yaml:"server"         mapstructure:"server"`
 	Cache     CacheConfig     `yaml:"cache"          mapstructure:"cache"`
@@ -23,28 +21,25 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `yaml:"read_timeout"      mapstructure:"read_timeout"`
 	WriteTimeout    time.Duration `yaml:"write_timeout"     mapstructure:"write_timeout"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"  mapstructure:"shutdown_timeout"`
-	// RateLimitRPS is the sustained request rate per IP (token bucket).
-	RateLimitRPS   float64 `yaml:"rate_limit_rps"    mapstructure:"rate_limit_rps"`
-	// RateLimitBurst is the maximum burst size above RateLimitRPS.
-	RateLimitBurst int     `yaml:"rate_limit_burst"  mapstructure:"rate_limit_burst"`
+	RateLimitRPS    float64       `yaml:"rate_limit_rps"    mapstructure:"rate_limit_rps"`
+	RateLimitBurst  int           `yaml:"rate_limit_burst"  mapstructure:"rate_limit_burst"`
 }
 
 type CacheConfig struct {
-	// SimilarityThreshold is the minimum cosine similarity [0,1] for a cache hit.
-	SimilarityThreshold float64       `yaml:"similarity_threshold" mapstructure:"similarity_threshold"`
+	SimilarityThreshold float64       `yaml:"similarity_threshold" mapstructure:"similarity_threshold"` // cosine similarity in (0, 1]
 	TTL                 time.Duration `yaml:"ttl"                  mapstructure:"ttl"`
 	MaxCandidates       uint64        `yaml:"max_candidates"       mapstructure:"max_candidates"`
 }
 
 type EmbedderConfig struct {
-	Provider string `yaml:"provider" mapstructure:"provider"` // "openai"
+	Provider string `yaml:"provider" mapstructure:"provider"`
 	Model    string `yaml:"model"    mapstructure:"model"`
 	APIKey   string `yaml:"api_key"  mapstructure:"api_key"`
 	BaseURL  string `yaml:"base_url" mapstructure:"base_url"`
 }
 
 type LLMConfig struct {
-	Provider    string `yaml:"provider"     mapstructure:"provider"` // "openai" | "passthrough"
+	Provider    string `yaml:"provider"     mapstructure:"provider"`
 	Model       string `yaml:"model"        mapstructure:"model"`
 	APIKey      string `yaml:"api_key"      mapstructure:"api_key"`
 	BaseURL     string `yaml:"base_url"     mapstructure:"base_url"`
@@ -52,7 +47,7 @@ type LLMConfig struct {
 }
 
 type VectorDBConfig struct {
-	Provider         string `yaml:"provider"          mapstructure:"provider"` // "qdrant" | "redis"
+	Provider         string `yaml:"provider"          mapstructure:"provider"`
 	QdrantHost       string `yaml:"qdrant_host"       mapstructure:"qdrant_host"`
 	QdrantPort       int    `yaml:"qdrant_port"       mapstructure:"qdrant_port"`
 	QdrantCollection string `yaml:"qdrant_collection" mapstructure:"qdrant_collection"`
@@ -64,22 +59,16 @@ type VectorDBConfig struct {
 	VectorDimension  uint64 `yaml:"vector_dimension"  mapstructure:"vector_dimension"`
 }
 
-// BreakerConfig holds circuit breaker settings for each protected component.
 type BreakerConfig struct {
 	LLM      ComponentBreakerConfig `yaml:"llm"       mapstructure:"llm"`
 	VectorDB ComponentBreakerConfig `yaml:"vector_db" mapstructure:"vector_db"`
 }
 
-// ComponentBreakerConfig parameterises a single circuit breaker instance.
 type ComponentBreakerConfig struct {
-	// MaxRequests is the number of probe requests allowed in half-open state.
-	MaxRequests uint32 `yaml:"max_requests" mapstructure:"max_requests"`
-	// Interval is the rolling window for the closed-state error rate.
-	Interval time.Duration `yaml:"interval" mapstructure:"interval"`
-	// Timeout is how long the breaker stays open before attempting half-open.
-	Timeout time.Duration `yaml:"timeout" mapstructure:"timeout"`
-	// FailureThreshold is the consecutive failure count that trips the breaker.
-	FailureThreshold uint32 `yaml:"failure_threshold" mapstructure:"failure_threshold"`
+	MaxRequests      uint32        `yaml:"max_requests"      mapstructure:"max_requests"`
+	Interval         time.Duration `yaml:"interval"          mapstructure:"interval"`
+	Timeout          time.Duration `yaml:"timeout"           mapstructure:"timeout"`
+	FailureThreshold uint32        `yaml:"failure_threshold" mapstructure:"failure_threshold"`
 }
 
 type TelemetryConfig struct {
@@ -87,8 +76,6 @@ type TelemetryConfig struct {
 	MetricsAddr string `yaml:"metrics_addr" mapstructure:"metrics_addr"`
 }
 
-// Defaults returns a Config pre-populated with safe production-ready values.
-// Viper callers should pass each field to SetDefault before ReadInConfig.
 func Defaults() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -133,7 +120,6 @@ func Defaults() *Config {
 	}
 }
 
-// Validate reports all constraint violations in a single error.
 func Validate(cfg *Config) error {
 	var errs []string
 
@@ -152,3 +138,4 @@ func Validate(cfg *Config) error {
 	}
 	return nil
 }
+

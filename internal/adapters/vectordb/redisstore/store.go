@@ -1,6 +1,3 @@
-// Package redisstore implements domain.VectorStorePort using Redis KV with an
-// in-process brute-force cosine scan. Suitable for moderate cache sizes; for
-// high-scale deployments, replace the scan with a native RedisSearch VSS index.
 package redisstore
 
 import (
@@ -30,14 +27,12 @@ type candidate struct {
 	score float32
 }
 
-// Store is a Redis-backed vector store.
 type Store struct {
 	client    *redis.Client
 	indexName string
 	dimension uint64
 }
 
-// New returns a Store connected to the given Redis instance.
 func New(addr, password, indexName string, db int, dimension uint64) (*Store, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
@@ -55,10 +50,8 @@ func New(addr, password, indexName string, db int, dimension uint64) (*Store, er
 	return &Store{client: rdb, indexName: indexName, dimension: dimension}, nil
 }
 
-// EnsureCollection satisfies the port contract; no-op for the KV implementation.
 func (s *Store) EnsureCollection(_ context.Context, _ uint64) error { return nil }
 
-// Upsert serialises the entry as JSON and stores it with a TTL derived from ExpiresAt.
 func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 	se := storedEntry{
 		ID:        entry.ID.String(),
@@ -81,7 +74,6 @@ func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 	return s.client.Set(ctx, entryPrefix+se.ID, data, ttl).Err()
 }
 
-// Search performs a full-scan cosine similarity search over all stored entries.
 func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, threshold float64) ([]domain.CacheEntry, error) {
 	var cursor uint64
 	var hits []candidate
@@ -153,7 +145,6 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 	return entries, nil
 }
 
-// Close releases the underlying Redis connection.
 func (s *Store) Close() error {
 	return s.client.Close()
 }
@@ -165,7 +156,7 @@ func cosineSimilarity(a, b []float32) float32 {
 	var dot, normA, normB float64
 	for i := range a {
 		av, bv := float64(a[i]), float64(b[i])
-		dot  += av * bv
+		dot += av * bv
 		normA += av * av
 		normB += bv * bv
 	}
@@ -182,3 +173,4 @@ func sortCandidates(hits []candidate) {
 		}
 	}
 }
+

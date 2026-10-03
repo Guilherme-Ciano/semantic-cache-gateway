@@ -1,5 +1,3 @@
-// Package openaiembedder implements domain.EmbedderPort using the OpenAI
-// Embeddings API (or any compatible endpoint).
 package openaiembedder
 
 import (
@@ -10,14 +8,11 @@ import (
 	oai "github.com/sashabaranov/go-openai"
 )
 
-// Embedder wraps the OpenAI client to satisfy domain.EmbedderPort.
 type Embedder struct {
 	client *oai.Client
 	model  oai.EmbeddingModel
 }
 
-// New returns an Embedder targeting the given model.
-// Set baseURL to redirect to a compatible local endpoint (e.g. Ollama).
 func New(apiKey, model, baseURL string) *Embedder {
 	cfg := oai.DefaultConfig(apiKey)
 	if baseURL != "" {
@@ -29,7 +24,6 @@ func New(apiKey, model, baseURL string) *Embedder {
 	}
 }
 
-// Embed returns the dense vector representation of text.
 func (e *Embedder) Embed(ctx context.Context, text string) (domain.Vector, error) {
 	resp, err := e.client.CreateEmbeddings(ctx, oai.EmbeddingRequestStrings{
 		Input: []string{text},
@@ -49,3 +43,4 @@ func (e *Embedder) Embed(ctx context.Context, text string) (domain.Vector, error
 	}
 	return vec, nil
 }
+

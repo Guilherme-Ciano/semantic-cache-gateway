@@ -1,6 +1,3 @@
-// Package breaker provides Circuit Breaker decorators for domain ports.
-// Each decorator wraps an existing port implementation and adds fault detection,
-// open-circuit fast-fail, and half-open recovery without touching domain logic.
 package breaker
 
 import (
@@ -13,21 +10,13 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-// LLMConfig parameterises the circuit breaker protecting the upstream LLM.
 type LLMConfig struct {
-	// MaxRequests is the number of requests allowed in half-open state.
-	MaxRequests uint32
-	// Interval is the rolling window duration for the closed-state error counter.
-	Interval gobreaker.DurationFunc
-	// Timeout is how long the breaker stays open before probing again.
-	Timeout gobreaker.DurationFunc
-	// FailureThreshold is the number of consecutive failures that trip the breaker.
+	MaxRequests      uint32
+	Interval         gobreaker.DurationFunc
+	Timeout          gobreaker.DurationFunc
 	FailureThreshold uint32
 }
 
-// LLM decorates domain.LLMPort with a circuit breaker.
-// When the breaker is open it returns domain.ErrCircuitOpen immediately,
-// preventing cascading failures toward the upstream provider.
 type LLM struct {
 	inner   domain.LLMPort
 	breaker *gobreaker.CircuitBreaker
@@ -35,7 +24,6 @@ type LLM struct {
 	log     *slog.Logger
 }
 
-// NewLLM wraps inner with a circuit breaker configured by cfg.
 func NewLLM(inner domain.LLMPort, cfg LLMConfig, metrics domain.MetricsRecorder, log *slog.Logger) *LLM {
 	name := "llm"
 	threshold := cfg.FailureThreshold
@@ -70,8 +58,6 @@ func NewLLM(inner domain.LLMPort, cfg LLMConfig, metrics domain.MetricsRecorder,
 	}
 }
 
-// Complete executes the wrapped LLM call through the circuit breaker.
-// Returns domain.ErrCircuitOpen when the breaker is in open state.
 func (l *LLM) Complete(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, error) {
 	result, err := l.breaker.Execute(func() (any, error) {
 		return l.inner.Complete(ctx, req)
@@ -93,3 +79,4 @@ func isOpenErr(err error) bool {
 	return errors.Is(err, gobreaker.ErrOpenState) ||
 		errors.Is(err, gobreaker.ErrTooManyRequests)
 }
+

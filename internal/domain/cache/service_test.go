@@ -12,8 +12,6 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain/cache"
 )
 
-// ── Mocks ─────────────────────────────────────────────────────────────────
-
 type mockEmbedder struct {
 	vec domain.Vector
 	err error
@@ -42,8 +40,8 @@ func (m *mockStore) Upsert(_ context.Context, e domain.CacheEntry) error {
 func (m *mockStore) EnsureCollection(_ context.Context, _ uint64) error { return nil }
 
 type mockLLM struct {
-	resp domain.LLMResponse
-	err  error
+	resp  domain.LLMResponse
+	err   error
 	calls int
 }
 
@@ -53,21 +51,19 @@ func (m *mockLLM) Complete(_ context.Context, _ domain.LLMRequest) (domain.LLMRe
 }
 
 type mockMetrics struct {
-	hits         int
-	misses       int
-	llmDurations []time.Duration
-	storeErrors  int
+	hits           int
+	misses         int
+	llmDurations   []time.Duration
+	storeErrors    int
 	embedDurations []time.Duration
 }
 
-func (m *mockMetrics) RecordCacheHit()                      { m.hits++ }
-func (m *mockMetrics) RecordCacheMiss()                     { m.misses++ }
-func (m *mockMetrics) RecordLLMDuration(d time.Duration)    { m.llmDurations = append(m.llmDurations, d) }
-func (m *mockMetrics) RecordStoreError()                    { m.storeErrors++ }
-func (m *mockMetrics) RecordEmbedDuration(d time.Duration)  { m.embedDurations = append(m.embedDurations, d) }
-func (m *mockMetrics) RecordBreakerTrip(_ string)           {}
-
-// ── Fixtures ───────────────────────────────────────────────────────────────
+func (m *mockMetrics) RecordCacheHit()                     { m.hits++ }
+func (m *mockMetrics) RecordCacheMiss()                    { m.misses++ }
+func (m *mockMetrics) RecordLLMDuration(d time.Duration)   { m.llmDurations = append(m.llmDurations, d) }
+func (m *mockMetrics) RecordStoreError()                   { m.storeErrors++ }
+func (m *mockMetrics) RecordEmbedDuration(d time.Duration) { m.embedDurations = append(m.embedDurations, d) }
+func (m *mockMetrics) RecordBreakerTrip(_ string)          {}
 
 var defaultVec = domain.Vector{0.1, 0.2, 0.3, 0.4}
 
@@ -93,8 +89,6 @@ func baseRequest() domain.LLMRequest {
 		Messages: []domain.Message{{Role: "user", Content: "What is the capital of France?"}},
 	}
 }
-
-// ── Table-driven tests ─────────────────────────────────────────────────────
 
 func TestHandle(t *testing.T) {
 	t.Parallel()
@@ -158,11 +152,11 @@ func TestHandle(t *testing.T) {
 			wantLLMCalls: 0,
 		},
 		{
-			name:         "LLM failure on cache miss propagates error",
-			embedVec:     defaultVec,
-			storeResults: nil,
-			llmErr:       errors.New("openai rate limit"),
-			wantErr:      true,
+			name:          "LLM failure on cache miss propagates error",
+			embedVec:      defaultVec,
+			storeResults:  nil,
+			llmErr:        errors.New("openai rate limit"),
+			wantErr:       true,
 			wantMissCount: 1,
 			wantLLMCalls:  1,
 		},
@@ -194,9 +188,9 @@ func TestHandle(t *testing.T) {
 			t.Parallel()
 
 			embedder := &mockEmbedder{vec: tc.embedVec, err: tc.embedErr}
-			store    := &mockStore{results: tc.storeResults, searchErr: tc.storeSearchErr}
-			llm      := &mockLLM{resp: tc.llmResp, err: tc.llmErr}
-			rec      := &mockMetrics{}
+			store := &mockStore{results: tc.storeResults, searchErr: tc.storeSearchErr}
+			llm := &mockLLM{resp: tc.llmResp, err: tc.llmErr}
+			rec := &mockMetrics{}
 
 			svc := newService(embedder, store, llm, rec)
 
@@ -297,19 +291,16 @@ func TestExtractQueryText(t *testing.T) {
 			t.Parallel()
 
 			embedder := &mockEmbedder{vec: defaultVec}
-			store    := &mockStore{}
-			llm      := &mockLLM{resp: domain.LLMResponse{Content: tc.want, Raw: []byte(tc.want)}}
-			rec      := &mockMetrics{}
+			store := &mockStore{}
+			llm := &mockLLM{resp: domain.LLMResponse{Content: tc.want, Raw: []byte(tc.want)}}
+			rec := &mockMetrics{}
 
 			svc := newService(embedder, store, llm, rec)
 			_, _, err := svc.Handle(context.Background(), tc.req)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-
-			// Verify the embed was called — the string actually passed to Embed
-			// is validated indirectly since mockEmbedder doesn't capture input.
-			// The meaningful assertion is that the whole Handle chain succeeds.
 		})
 	}
 }
+

@@ -1,5 +1,3 @@
-// Package openaillm implements domain.LLMPort using the OpenAI Chat Completions
-// API (or any compatible endpoint such as vLLM, Ollama with OpenAI compat, etc.).
 package openaillm
 
 import (
@@ -10,13 +8,11 @@ import (
 	oai "github.com/sashabaranov/go-openai"
 )
 
-// Client wraps go-openai to satisfy domain.LLMPort.
 type Client struct {
 	inner *oai.Client
 	model string
 }
 
-// New returns a Client pointing at the given endpoint.
 func New(apiKey, model, baseURL string) *Client {
 	cfg := oai.DefaultConfig(apiKey)
 	if baseURL != "" {
@@ -29,7 +25,6 @@ func New(apiKey, model, baseURL string) *Client {
 	}
 }
 
-// Complete sends a chat completion request to the upstream model.
 func (c *Client) Complete(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -59,3 +54,4 @@ func (c *Client) Complete(ctx context.Context, req domain.LLMRequest) (domain.LL
 		Raw:     []byte(content),
 	}, nil
 }
+

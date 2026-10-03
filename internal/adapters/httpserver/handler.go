@@ -17,31 +17,25 @@ import (
 )
 
 const (
-	// Standard cache protocol headers.
-	headerCacheStatus = "X-Cache"           // HIT | MISS
-	headerEntryID     = "X-Cache-Entry-Id"  // UUID of the matched or created entry
-
-	// Semantic-cache–specific headers — preferred by AI agents and orchestrators.
-	headerSemanticCache     = "X-Semantic-Cache"   // HIT | MISS
-	headerSimilarityScore   = "X-Similarity-Score" // cosine similarity [0, 1]
-	headerCacheLegacyScore  = "X-Cache-Score"      // kept for backward compat
-	headerRequestLatencyMs  = "X-Request-Latency-Ms"
+	headerCacheStatus      = "X-Cache"
+	headerEntryID          = "X-Cache-Entry-Id"
+	headerSemanticCache    = "X-Semantic-Cache"
+	headerSimilarityScore  = "X-Similarity-Score"
+	headerCacheLegacyScore = "X-Cache-Score"
+	headerRequestLatencyMs = "X-Request-Latency-Ms"
 )
 
-// Config groups HTTP-layer tunables injected at construction time.
 type Config struct {
 	RequestTimeout time.Duration
 	RateLimitRPS   float64
 	RateLimitBurst int
 }
 
-// Handler holds the HTTP layer dependencies.
 type Handler struct {
 	svc *cache.Service
 	log *slog.Logger
 }
 
-// New returns an http.Handler with all routes and middlewares mounted.
 func New(svc *cache.Service, metrics *telemetry.Metrics, cfg Config, log *slog.Logger) http.Handler {
 	h := &Handler{svc: svc, log: log}
 
@@ -65,9 +59,7 @@ func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-// chatCompletions is the primary gateway endpoint compatible with the OpenAI
-// Chat Completions API. Any client targeting /v1/chat/completions can use
-// this gateway as a drop-in replacement by changing only the base URL.
+// chatCompletions handles OpenAI-compatible /v1/chat/completions requests.
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
@@ -94,23 +86,18 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		cacheStatus = "HIT"
 	}
 
-	// Standard cache headers (RFC-7234 convention).
 	w.Header().Set(headerCacheStatus, cacheStatus)
 	w.Header().Set(headerEntryID, result.Entry.ID.String())
-
-	// Semantic-cache–specific headers consumed by AI agents and orchestrators.
 	w.Header().Set(headerSemanticCache, cacheStatus)
 	w.Header().Set(headerRequestLatencyMs, strconv.FormatInt(time.Since(start).Milliseconds(), 10))
 	if result.IsHit {
 		score := strconv.FormatFloat(float64(result.Entry.Score), 'f', 4, 32)
 		w.Header().Set(headerSimilarityScore, score)
-		w.Header().Set(headerCacheLegacyScore, score) // backward compat
+		w.Header().Set(headerCacheLegacyScore, score)
 	}
 
 	writeJSON(w, http.StatusOK, toOpenAIResponse(resp, req.Model))
 }
-
-// ── OpenAI wire types ──────────────────────────────────────────────────────
 
 type openAIChatRequest struct {
 	Model    string    `json:"model"`
@@ -169,3 +156,4 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 func errBody(msg string) map[string]string {
 	return map[string]string{"error": msg}
 }
+

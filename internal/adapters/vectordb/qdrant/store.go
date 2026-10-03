@@ -1,4 +1,3 @@
-// Package qdrant implements domain.VectorStorePort backed by Qdrant.
 package qdrant
 
 import (
@@ -6,27 +5,27 @@ import (
 	"fmt"
 	"time"
 
-	pb "github.com/qdrant/go-client/qdrant"
-	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
 	"github.com/google/uuid"
+	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
+	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
-const payloadKeyQuery    = "query"
-const payloadKeyResponse = "response"
-const payloadKeyExpires  = "expires_at"
+const (
+	payloadKeyQuery    = "query"
+	payloadKeyResponse = "response"
+	payloadKeyExpires  = "expires_at"
+)
 
-// Store is a Qdrant-backed vector store.
 type Store struct {
-	client     pb.PointsClient
+	client      pb.PointsClient
 	collections pb.CollectionsClient
-	collection string
-	dimension  uint64
+	collection  string
+	dimension   uint64
 }
 
-// New dials the Qdrant gRPC endpoint and returns a ready Store.
 func New(host string, port int, collection string, dimension uint64, apiKey string) (*Store, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 
@@ -50,7 +49,6 @@ func New(host string, port int, collection string, dimension uint64, apiKey stri
 	}, nil
 }
 
-// EnsureCollection creates the collection if it doesn't already exist.
 func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 	_, err := s.collections.Get(ctx, &pb.GetCollectionInfoRequest{CollectionName: s.collection})
 	if err == nil {
@@ -74,7 +72,6 @@ func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 	return nil
 }
 
-// Search retrieves the nearest neighbours above threshold.
 func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, threshold float64) ([]domain.CacheEntry, error) {
 	score := float32(threshold)
 	resp, err := s.client.Search(ctx, &pb.SearchPoints{
@@ -99,7 +96,6 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 	return entries, nil
 }
 
-// Upsert inserts or replaces a cache entry in Qdrant.
 func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 	idStr := entry.ID.String()
 	point := &pb.PointStruct{
@@ -132,7 +128,7 @@ func pointToEntry(r *pb.ScoredPoint) (domain.CacheEntry, error) {
 	}
 
 	payload := r.Payload
-	query    := payload[payloadKeyQuery].GetStringValue()
+	query := payload[payloadKeyQuery].GetStringValue()
 	response := payload[payloadKeyResponse].GetStringValue()
 
 	var expiresAt time.Time
@@ -155,3 +151,4 @@ func apiKeyInterceptor(key string) grpc.UnaryClientInterceptor {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
+

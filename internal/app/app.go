@@ -15,7 +15,6 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/pkg/telemetry"
 )
 
-// App owns the HTTP server and all wired dependencies.
 type App struct {
 	server          *http.Server
 	svc             *cache.Service
@@ -23,7 +22,6 @@ type App struct {
 	log             *slog.Logger
 }
 
-// New constructs the full application graph given the provided ports.
 func New(
 	cfg *config.Config,
 	embedder domain.EmbedderPort,
@@ -66,9 +64,7 @@ func New(
 	}, nil
 }
 
-// Run starts the HTTP server and blocks until ctx is cancelled.
-// On cancellation it performs a two-phase shutdown: first drains in-flight HTTP
-// requests, then waits for all pending async cache writes to complete.
+// Run starts the HTTP server and performs graceful shutdown on context cancellation.
 func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 
@@ -101,3 +97,4 @@ func (a *App) Run(ctx context.Context) error {
 
 	return nil
 }
+

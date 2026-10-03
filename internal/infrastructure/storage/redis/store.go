@@ -1,6 +1,3 @@
-// Package redis implements domain.VectorStorePort backed by Redis Stack
-// (RediSearch + Vector Similarity Search). Entries are stored as Redis HASHes
-// with a native TTL and searched via HNSW KNN index over COSINE distance.
 package redis
 
 import (
@@ -29,7 +26,6 @@ const (
 	fieldDistance  = "distance"
 )
 
-// Store is the Redis Stack vector store implementation.
 type Store struct {
 	client     *goredis.Client
 	index      string
@@ -38,8 +34,6 @@ type Store struct {
 	log        *slog.Logger
 }
 
-// New dials the Redis instance and returns a Store ready for use.
-// Call EnsureCollection before issuing Search or Upsert commands.
 func New(addr, password, index string, db int, dimension uint64, ttl time.Duration, log *slog.Logger) (*Store, error) {
 	c := goredis.NewClient(&goredis.Options{
 		Addr:     addr,
@@ -63,8 +57,6 @@ func New(addr, password, index string, db int, dimension uint64, ttl time.Durati
 	}, nil
 }
 
-// EnsureCollection creates the RediSearch HNSW vector index if it does not
-// already exist. Safe to call repeatedly — idempotent.
 func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 	if dimension > 0 {
 		s.dimension = dimension
@@ -127,12 +119,8 @@ func (s *Store) EnsureCollection(ctx context.Context, dimension uint64) error {
 	return nil
 }
 
-// Search executes an HNSW KNN query against the vector index and returns at
-// most limit entries whose cosine similarity meets or exceeds threshold.
-// On every cache HIT the key TTL is renewed to extend the entry's lifetime.
 func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, threshold float64) ([]domain.CacheEntry, error) {
-	// COSINE distance ∈ [0, 2]: similarity = 1 − distance.
-	// Reject entries where similarity < threshold ⇔ distance > (1 − threshold).
+	// COSINE distance in [0, 2]: similarity = 1 - distance.
 	maxDistance := 1.0 - threshold
 
 	ftQuery := fmt.Sprintf("*=>[KNN %d @%s $vec AS %s]", limit, fieldEmbedding, fieldDistance)
@@ -186,8 +174,6 @@ func (s *Store) Search(ctx context.Context, query domain.Vector, limit uint64, t
 	return entries, nil
 }
 
-// Upsert writes an entry as a Redis HASH and sets a native TTL via EXPIREAT.
-// The HNSW index picks up the new vector automatically on the next compaction.
 func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 	key := keyPrefix + entry.ID.String()
 
@@ -208,16 +194,11 @@ func (s *Store) Upsert(ctx context.Context, entry domain.CacheEntry) error {
 	return nil
 }
 
-// Close releases the underlying Redis connection pool.
 func (s *Store) Close() error {
 	return s.client.Close()
 }
 
-// ── TTL renewal ───────────────────────────────────────────────────────────
-
-// refreshTTL extends the TTL of key by defaultTTL, invoked in a background
-// goroutine on every cache hit. Uses a fresh context to survive the request's
-// cancellation.
+// refreshTTL extends key TTL asynchronously with a detached context.
 func (s *Store) refreshTTL(key string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -230,10 +211,7 @@ func (s *Store) refreshTTL(key string) {
 	}
 }
 
-// ── Binary vector encoding ────────────────────────────────────────────────
-
-// vectorToBytes serialises a float32 slice into a little-endian byte slice
-// suitable for RediSearch VECTOR field storage and KNN query parameters.
+// vectorToBytes serializes float32 slice to little-endian bytes for RediSearch VECTOR fields.
 func vectorToBytes(v domain.Vector) []byte {
 	buf := make([]byte, len(v)*4)
 	for i, f := range v {
@@ -242,8 +220,6 @@ func vectorToBytes(v domain.Vector) []byte {
 	return buf
 }
 
-// bytesToVector deserialises a little-endian byte slice back into float32.
-// Returns nil if b is not a multiple of 4 bytes.
 func bytesToVector(b []byte) domain.Vector {
 	if len(b)%4 != 0 {
 		return nil
@@ -255,8 +231,6 @@ func bytesToVector(b []byte) domain.Vector {
 	}
 	return v
 }
-
-// ── Parsing helpers ───────────────────────────────────────────────────────
 
 func parseFloat(v interface{}) (float64, bool) {
 	switch val := v.(type) {
@@ -305,5 +279,5 @@ func isAlreadyExistsErr(err error) bool {
 	return strings.Contains(err.Error(), "Index already exists")
 }
 
-// bytesToVector is kept to prevent dead-code elimination in future retrieval paths.
 var _ = bytesToVector
+

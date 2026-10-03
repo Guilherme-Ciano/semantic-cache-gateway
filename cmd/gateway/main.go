@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// version is stamped at build time via -ldflags.
 var version = "dev"
 
 func main() {
@@ -75,7 +74,6 @@ func initViper() {
 	setViperDefaults(config.Defaults())
 
 	if err := viper.ReadInConfig(); err == nil {
-		// config file found and loaded — no log yet, logger is built from config
 		fmt.Fprintf(os.Stderr, "using config file: %s\n", viper.ConfigFileUsed())
 	}
 }
@@ -122,8 +120,6 @@ func runGateway(_ *cobra.Command, _ []string) error {
 
 	return application.Run(ctx)
 }
-
-// ── Adapters ──────────────────────────────────────────────────────────────
 
 func buildVectorStore(cfg *config.Config, log *slog.Logger) (domain.VectorStorePort, func(), error) {
 	switch cfg.VectorDB.Provider {
@@ -188,8 +184,6 @@ func buildLLM(cfg *config.Config) domain.LLMPort {
 	return openaillm.New(cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.BaseURL)
 }
 
-// ── Breaker config adapters ───────────────────────────────────────────────
-
 func breakerLLMConfig(c config.ComponentBreakerConfig) breaker.LLMConfig {
 	iv, to := c.Interval, c.Timeout
 	return breaker.LLMConfig{
@@ -209,8 +203,6 @@ func breakerStoreConfig(c config.ComponentBreakerConfig) breaker.StoreConfig {
 		FailureThreshold: c.FailureThreshold,
 	}
 }
-
-// ── Viper defaults ────────────────────────────────────────────────────────
 
 func setViperDefaults(d *config.Config) {
 	viper.SetDefault("server.addr", d.Server.Addr)

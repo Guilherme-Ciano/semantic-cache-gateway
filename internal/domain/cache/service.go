@@ -12,14 +12,11 @@ import (
 	"github.com/guilhermebr/semantic-cache-gateway/internal/domain"
 )
 
-// Result carries the outcome of a Handle call.
 type Result struct {
 	Entry domain.CacheEntry
 	IsHit bool
 }
 
-// Service orchestrates the semantic cache logic, decoupled from any particular
-// embedding model, vector store, or LLM implementation.
 type Service struct {
 	embedder  domain.EmbedderPort
 	store     domain.VectorStorePort
@@ -32,7 +29,6 @@ type Service struct {
 	wg        sync.WaitGroup
 }
 
-// NewService constructs a Service with the required ports and cache parameters.
 func NewService(
 	embedder domain.EmbedderPort,
 	store domain.VectorStorePort,
@@ -56,9 +52,6 @@ func NewService(
 }
 
 // Handle processes an LLM request through the semantic cache.
-// On a cache miss it calls the upstream LLM and schedules an asynchronous persist.
-// If the vector store circuit is open the call falls through to the LLM transparently.
-// If the LLM circuit is open ErrCircuitOpen propagates to the caller.
 func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLMResponse, Result, error) {
 	queryText := extractQueryText(req)
 
@@ -116,8 +109,7 @@ func (s *Service) Handle(ctx context.Context, req domain.LLMRequest) (domain.LLM
 	return resp, Result{Entry: entry, IsHit: false}, nil
 }
 
-// Drain blocks until all in-flight async persist goroutines have completed.
-// Must be called during graceful shutdown before process exit.
+// Drain blocks until all in-flight persist goroutines complete.
 func (s *Service) Drain() {
 	s.wg.Wait()
 }
@@ -141,8 +133,7 @@ func (s *Service) schedulePersist(entry domain.CacheEntry) {
 	}()
 }
 
-// extractQueryText produces a canonical string from an LLMRequest for embedding.
-// User-role messages are concatenated in order; if none exist, all messages are used.
+// extractQueryText extracts user content or falls back to raw request bytes.
 func extractQueryText(req domain.LLMRequest) string {
 	if len(req.Messages) == 0 {
 		return string(req.Raw)
@@ -166,3 +157,4 @@ func extractQueryText(req domain.LLMRequest) string {
 
 	return string(buf)
 }
+

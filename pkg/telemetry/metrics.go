@@ -1,5 +1,3 @@
-// Package telemetry owns Prometheus metric registration and provides a
-// Recorder that the domain service uses without depending on Prometheus directly.
 package telemetry
 
 import (
@@ -13,17 +11,15 @@ import (
 
 const namespace = "scg"
 
-// Metrics holds all instrumented Prometheus descriptors for the gateway.
 type Metrics struct {
-	cacheHits     prometheus.Counter
-	cacheMisses   prometheus.Counter
-	llmDuration   prometheus.Histogram
-	storeErrors   prometheus.Counter
-	embedLatency  prometheus.Histogram
-	breakerTrips  *prometheus.CounterVec
+	cacheHits    prometheus.Counter
+	cacheMisses  prometheus.Counter
+	llmDuration  prometheus.Histogram
+	storeErrors  prometheus.Counter
+	embedLatency prometheus.Histogram
+	breakerTrips *prometheus.CounterVec
 }
 
-// New registers all metrics with the default Prometheus registry.
 func New() *Metrics {
 	return &Metrics{
 		cacheHits: promauto.NewCounter(prometheus.CounterOpts{
@@ -61,23 +57,12 @@ func New() *Metrics {
 	}
 }
 
-// RecordCacheHit increments the cache hit counter.
-func (m *Metrics) RecordCacheHit() { m.cacheHits.Inc() }
-
-// RecordCacheMiss increments the cache miss counter.
-func (m *Metrics) RecordCacheMiss() { m.cacheMisses.Inc() }
-
-// RecordLLMDuration records a completed LLM call latency.
-func (m *Metrics) RecordLLMDuration(d time.Duration) { m.llmDuration.Observe(d.Seconds()) }
-
-// RecordStoreError increments the vector store error counter.
-func (m *Metrics) RecordStoreError() { m.storeErrors.Inc() }
-
-// RecordEmbedDuration records an embedding call latency.
+func (m *Metrics) RecordCacheHit()                     { m.cacheHits.Inc() }
+func (m *Metrics) RecordCacheMiss()                    { m.cacheMisses.Inc() }
+func (m *Metrics) RecordLLMDuration(d time.Duration)   { m.llmDuration.Observe(d.Seconds()) }
+func (m *Metrics) RecordStoreError()                   { m.storeErrors.Inc() }
 func (m *Metrics) RecordEmbedDuration(d time.Duration) { m.embedLatency.Observe(d.Seconds()) }
+func (m *Metrics) RecordBreakerTrip(component string)  { m.breakerTrips.WithLabelValues(component).Inc() }
 
-// RecordBreakerTrip increments the circuit breaker trip counter for the given component.
-func (m *Metrics) RecordBreakerTrip(component string) { m.breakerTrips.WithLabelValues(component).Inc() }
-
-// Handler returns the standard Prometheus HTTP handler for /metrics.
 func Handler() http.Handler { return promhttp.Handler() }
+
